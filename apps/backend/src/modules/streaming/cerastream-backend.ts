@@ -65,7 +65,6 @@
 import { existsSync } from "node:fs";
 import {
 	type AudioInputConfig,
-	type CancelStart,
 	CERASTREAM_BIN,
 	type CerastreamClient,
 	CerastreamConnectionError,
@@ -73,6 +72,7 @@ import {
 	CerastreamTimeoutError,
 	type ChangeConfigParams,
 	type ChangeConfigResult,
+	type CheckMicRoutesParams,
 	type ConnectOptions,
 	changeConfigResultSchema,
 	connect,
@@ -87,6 +87,7 @@ import {
 	type ListSwitchTargetsResult,
 	listSwitchTargetsResultSchema,
 	type PartialCerastreamConfig,
+	type PrepareStartResult,
 	type ReloadConfigParams,
 	type ReloadConfigResult,
 	type RuntimeErrorEvent,
@@ -149,9 +150,9 @@ import type { ResolvedCerastreamError } from "./cerastream-error-mapping.ts";
 import { resolveCerastreamError } from "./cerastream-error-mapping.ts";
 import {
 	cancelScopedStart,
+	readLaunchCapabilities,
 	scopedStartRefused,
 	startRefusedBeforeAdmission,
-	supportsScopedStart,
 } from "./cerastream-start-attempt.ts";
 import { SRTLA_LISTEN_PORT } from "./constants.ts";
 import { deviceRegistry } from "./devices.ts";
@@ -171,10 +172,16 @@ import {
 	createLaunchTransaction,
 	type LaunchTransaction,
 } from "./launch-transaction.ts";
+import {
+	hasOrderedMicProofs,
+	micRouteKeys,
+	networkAudioSource,
+} from "./mic-route-admission.ts";
 import { asRawRequestClient } from "./raw-request.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
+	typedStartFailure,
 } from "./start-failure-taxonomy.ts";
 import {
 	ENGINE_CLOSE_DEADLINE_MS,
@@ -834,6 +841,36 @@ export class CerastreamBackend implements StreamingBackend {
 		return ["--config", this.deps.configPath];
 	}
 
+	/** A choice observation is read-only and never reserves a Start. */
+	async admitMicRoutes(
+		params: CheckMicRoutesParams,
+	): Promise<string[] | undefined> {
+		try {
+			const client = await this.deps.connect({
+				...this.deps.connectOptions,
+				autoReconnect: false,
+			});
+			try {
+				const caps = await readLaunchCapabilities(client);
+				if (!caps.micRouteCheck) return undefined;
+				const result = await client.checkMicRoutes?.(params);
+				if (
+					result?.status === "checked" &&
+					hasOrderedMicProofs(result.proofs, micRouteKeys(params.audio).length)
+				)
+					return result.proofs;
+				return undefined;
+			} finally {
+				await client.close();
+			}
+		} catch {
+			this.deps.logger.debug(
+				"cerastream: could not admit the selected microphone route",
+			);
+			return undefined;
+		}
+	}
+
 	async start(
 		config: RuntimeConfig,
 		opts: StreamRunOptions,
@@ -849,16 +886,33 @@ export class CerastreamBackend implements StreamingBackend {
 		let refusedBeforeAdmission = false;
 		let scoped = false;
 		let negotiatingCapabilities = false;
-		let attempt: CancelStart | undefined;
+		let checkingMicRoutes = false;
+		let attempt: PrepareStartResult | undefined;
 		let startConfirmed = false;
 		let confirmedIdle = false;
 		let acquiredClient: CerastreamClient | undefined;
 		let acquiredSubscription: Subscription | undefined;
 		const launchTransaction =
 			transaction ?? createLaunchTransaction("backend-start");
+		const micFailure = () =>
+			typedStartFailure(
+				opts.micRoute?.attemptId ?? "backend-start",
+				"params",
+				"audio_source_unavailable",
+				"audio_source_probe_failed",
+			);
 		try {
 			let params = this.buildStartParams(config, opts);
+			if (
+				micRouteKeys(params.audio).length &&
+				opts.micRoute?.legacyAddressOnly !== true
+			)
+				registerLaunchRollback({
+					kind: "mic-preflight",
+					run: launchTransaction.rollback,
+				});
 			let audioMixInputs: CerastreamBackend["audioMixInputs"];
+			let appliedProofs: string[] | undefined;
 			await this.enqueue(async () => {
 				assertStreamLaunchOwnership();
 				let confirmStreaming: (() => void) | undefined;
@@ -881,16 +935,34 @@ export class CerastreamBackend implements StreamingBackend {
 				beginCapabilitiesEpoch();
 				this.client = client;
 				const clientEpoch = ++this.clientEpoch;
+				const assertLaunchSocket = () => {
+					assertStreamLaunchOwnership();
+					if (
+						!this.active ||
+						this.client !== client ||
+						this.clientEpoch !== clientEpoch
+					)
+						throw new CerastreamConnectionError(
+							"The streaming launch socket was replaced",
+						);
+				};
 				this.runtimeEvidence = undefined;
 				this.telemetry = {};
 				this.lastPolicyReloadRequested = undefined;
 				// A negotiation failure gives us no evidence about device liveness.
 				negotiatingCapabilities = true;
-				scoped = await launchTransaction.runPhase("start-rpc", () =>
-					supportsScopedStart(client),
+				const launchCaps = await launchTransaction.runPhase(
+					"start-rpc",
+					async (current) => {
+						const capabilities = await readLaunchCapabilities(client);
+						current();
+						assertLaunchSocket();
+						return capabilities;
+					},
 				);
+				scoped = launchCaps.scoped;
 				negotiatingCapabilities = false;
-				assertStreamLaunchOwnership();
+				assertLaunchSocket();
 				const subscription = await launchTransaction.acquirePhase(
 					"subscribe",
 					() =>
@@ -924,7 +996,7 @@ export class CerastreamBackend implements StreamingBackend {
 					(subscription) => subscription.close(),
 				);
 				acquiredSubscription = subscription;
-				assertStreamLaunchOwnership();
+				assertLaunchSocket();
 				this.subscription = subscription;
 				launchTransaction.register(async () => {
 					if (refusedBeforeAdmission) return;
@@ -937,7 +1009,7 @@ export class CerastreamBackend implements StreamingBackend {
 										autoReconnect: false,
 										requestTimeoutMs: ENGINE_STATE_RECONCILE_TIMEOUT,
 									}),
-								attempt,
+								{ attempt_id: attempt.attempt_id },
 							);
 						return;
 					}
@@ -956,16 +1028,25 @@ export class CerastreamBackend implements StreamingBackend {
 				});
 				const result = await launchTransaction.runPhase(
 					"start-rpc",
-					async () => {
-						assertStreamLaunchOwnership();
+					async (current) => {
+						const assertCurrent = () => {
+							current();
+							assertLaunchSocket();
+						};
+						assertCurrent();
+						let expires = Infinity;
 						if (scoped) {
-							attempt = await client.prepareStart();
-							assertStreamLaunchOwnership();
+							const preparingAt = performance.now();
+							const prepared = await client.prepareStart();
+							attempt = prepared;
+							expires = preparingAt + prepared.expires_in_ms;
+							assertCurrent();
 						}
-						const launchConfig =
+						const prospectiveConfig = () =>
 							opts.audioAtDispatch === undefined
 								? config
 								: { ...config, ...opts.audioAtDispatch() };
+						const launchConfig = prospectiveConfig();
 						if (launchConfig !== config) {
 							const audio = startParamsWithAudioModeSchema.shape.audio.parse(
 								this.encodeStartAudio(
@@ -976,6 +1057,83 @@ export class CerastreamBackend implements StreamingBackend {
 							);
 							const { audio: _previous, ...rest } = params;
 							params = audio === undefined ? rest : { ...rest, audio };
+						}
+						const keys = micRouteKeys(params.audio);
+						if (
+							params.audio !== undefined &&
+							keys.length > 0 &&
+							opts.micRoute?.legacyAddressOnly !== true
+						) {
+							const refuse = () => {
+								throw new StreamStartFailure(micFailure());
+							};
+							checkingMicRoutes = true;
+							const prepared = attempt;
+							if (
+								prepared === undefined ||
+								!launchCaps.micRouteCheck ||
+								client.checkMicRoutes === undefined ||
+								opts.micRoute === undefined ||
+								new Set(keys).size !== keys.length
+							)
+								return refuse();
+							const audio = params.audio;
+							const backend = audio.backend ?? launchCaps.audioBackend;
+							const checkedAudio = { ...audio, backend };
+							const assertPlan = () => {
+								assertCurrent();
+								if (performance.now() >= expires)
+									throw new CerastreamTimeoutError(
+										"prepare-start",
+										prepared.expires_in_ms,
+									);
+								if (
+									attempt !== prepared ||
+									!Bun.deepEquals(
+										audio,
+										this.encodeStartAudio(
+											prospectiveConfig(),
+											params.pipeline,
+											opts.audioOff,
+										),
+									)
+								)
+									refuse();
+							};
+							assertPlan();
+							const expected = await opts.micRoute.expected(audio);
+							assertPlan();
+							if (
+								expected === undefined ||
+								!hasOrderedMicProofs(expected, keys.length)
+							)
+								return refuse();
+							const result = await client
+								.checkMicRoutes({
+									audio: checkedAudio,
+									network: networkAudioSource(params.pipeline),
+									operation: { kind: "verify", expected },
+								})
+								.catch((error: unknown) => {
+									if (
+										error instanceof CerastreamConnectionError ||
+										error instanceof CerastreamTimeoutError
+									)
+										throw error;
+									return refuse();
+								});
+							assertPlan();
+							if (
+								result.status !== "checked" ||
+								!Bun.deepEquals(result.proofs, expected)
+							)
+								return refuse();
+							appliedProofs = expected;
+							params = {
+								...params,
+								audio: checkedAudio,
+								mic_route_proofs: expected,
+							};
 						}
 						const effective =
 							params.audio?.inputs === undefined
@@ -991,11 +1149,26 @@ export class CerastreamBackend implements StreamingBackend {
 								)?.id ?? input.input_id,
 						}));
 						if (attempt !== undefined) {
+							assertCurrent();
+							if (appliedProofs !== undefined) {
+								if (performance.now() >= expires)
+									throw new CerastreamTimeoutError(
+										"prepare-start",
+										attempt.expires_in_ms,
+									);
+								registerLaunchRollback({
+									kind: "transaction",
+									run: launchTransaction.rollback,
+								});
+								checkingMicRoutes = false;
+							}
 							dispatched = true;
-							return client.start({
+							const started = await client.start({
 								...params,
 								attempt_id: attempt.attempt_id,
 							});
+							assertCurrent();
+							return started;
 						}
 						dispatched = true;
 						registerLaunchRollback({ kind: "legacy-dispatched" });
@@ -1013,18 +1186,20 @@ export class CerastreamBackend implements StreamingBackend {
 						return "start-rpc";
 					},
 				);
-				await launchTransaction.runPhase("playing-wait", async () => {
+				await launchTransaction.runPhase("playing-wait", async (current) => {
 					const parsed = startResultSchema.parse(result);
 					if (parsed.state !== "streaming") await streamingStatus;
+					current();
 				});
 				if (scoped) {
-					assertStreamLaunchOwnership();
+					assertLaunchSocket();
 					startConfirmed = true;
 				}
 				// Subscription replay predates this Start acknowledgement.
 				if (this.client === client && this.clientEpoch === clientEpoch) {
 					this.audioMixInputs = audioMixInputs;
 					this.runtimeEvidence = undefined;
+					opts.micRoute?.applied(appliedProofs, params.audio?.backend);
 				}
 			}, "start");
 		} catch (error) {
@@ -1036,13 +1211,15 @@ export class CerastreamBackend implements StreamingBackend {
 			if (this.subscription === acquiredSubscription)
 				this.subscription = undefined;
 			const failure =
-				error instanceof StreamStartFailure
-					? error.failure
-					: classifyStartFailure(
-							dispatched ? "start-rpc" : "params",
-							error,
-							"backend-start",
-						);
+				checkingMicRoutes && !dispatched
+					? micFailure()
+					: error instanceof StreamStartFailure
+						? error.failure
+						: classifyStartFailure(
+								dispatched ? "start-rpc" : "params",
+								error,
+								"backend-start",
+							);
 			throw new StreamStartFailure(
 				failure,
 				negotiatingCapabilities || scoped || (dispatched && !confirmedIdle)

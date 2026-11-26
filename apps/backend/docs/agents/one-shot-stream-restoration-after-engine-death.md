@@ -50,6 +50,12 @@ config snapshot plus the current `boot_id`, and nothing else that matters.
   still owns backend, codec, delay and applied mix values; discovery never
   substitutes an unrelated saved pick. A marker from before the mix was recorded
   leaves the mix and the backend to the saved ones.
+- **The opaque route batch describes the applied local legs, in wire order.**
+  A fresh marker records it only after an acknowledged launch, with an empty
+  batch for a new launch without local legs. A restore verifies that batch on
+  the launch socket, never admits a fresh batch for a saved address. A historical
+  address-only marker retains its old behavior; old inventory IDs do not become
+  proofs. A failed or late action does not advance the marker.
 - **Video and network fields are not followed.** A live bitrate, source or encoder
   change leaves the marker's value from arming, as before. The audio part is covered
   by `tests/no-audio-start.test.ts` through the real marker, runner and launch.

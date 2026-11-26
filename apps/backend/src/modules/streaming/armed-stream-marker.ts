@@ -58,6 +58,7 @@
 
 import fs from "node:fs";
 
+import { micRouteProofsSchema } from "@ceralive/cerastream";
 import {
 	type RecoveryFailureReason,
 	recoveryFailureReasonSchema,
@@ -113,6 +114,7 @@ const armedStreamConfigSchema = z.object({
 	audio_physical_ids: z.record(z.string().min(1), z.string().min(1)).optional(),
 	/** Address-bound inputs may start unchanged but cannot be identified on restore. */
 	audio_unverified_ids: z.array(z.string().min(1)).optional(),
+	mic_route_proofs: micRouteProofsSchema.optional(),
 	/** The engine acknowledged a live switch to its silence leg. */
 	audio_silenced: z.boolean().optional(),
 	relay_server: z.string().optional(),
@@ -135,9 +137,10 @@ const armedStreamConfigSchema = z.object({
 });
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
-type LaunchedAudio = StartAudio["config"] & {
+export type LaunchedAudio = StartAudio["config"] & {
 	readonly audio_physical_ids?: ArmedStreamConfig["audio_physical_ids"];
 	readonly audio_unverified_ids?: ArmedStreamConfig["audio_unverified_ids"];
+	readonly mic_route_proofs?: ArmedStreamConfig["mic_route_proofs"];
 	readonly audio_silenced?: boolean;
 };
 let launchedAudio: LaunchedAudio | undefined;
@@ -184,6 +187,7 @@ export type RestorationAttempt = z.infer<typeof restorationAttemptSchema>;
 
 const armedStreamMarkerSchema = z.object({
 	armedAt: z.number(),
+	armId: z.uuidv4().optional(),
 	bootId: z.string().min(1),
 	config: armedStreamConfigSchema,
 	/**

@@ -32,6 +32,7 @@
 //   * OUT: srtla link bonding + per-link telemetry. srtla_send is a separate
 //          supervised process; its telemetry is owned by `link-telemetry.ts`.
 
+import type { AudioConfig } from "@ceralive/cerastream";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import type { LaunchTransaction } from "./launch-transaction.ts";
 
@@ -52,6 +53,15 @@ export interface StreamRunOptions {
 	audioOff?: boolean;
 	/** Refresh only the accepted audio selection at the engine request boundary. */
 	readonly audioAtDispatch?: () => Pick<RuntimeConfig, "asrc" | "audio_inputs">;
+	readonly micRoute?: {
+		readonly attemptId: string;
+		readonly legacyAddressOnly: boolean;
+		readonly expected: (audio: AudioConfig) => Promise<string[] | undefined>;
+		readonly applied: (
+			proofs: string[] | undefined,
+			backend: AudioConfig["backend"],
+		) => void;
+	};
 }
 
 /**

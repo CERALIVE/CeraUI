@@ -20,17 +20,18 @@ eligible when it moves USB ports, even if the roster still names the old port.
 A refusal does not update the saved pick or mix, and diagnostic serials are not
 used to identify the current occupant.
 
-Agreement is not verification. The original receiver and a replacement can
-present the same scan and stale roster evidence and both take the ordinary
-restore path. Checking the actual open after a port move or when a stale report
-still looks plausible requires cerastream's verified route check and a receiver
-qualified for that route. This change enables neither.
+Agreement is not verification. The picker, concrete Auto choice and used saved
+mix legs retain opaque producer admission proofs, independently of the roster.
+The roster may propose a replacement address. Before using it, Start checks the
+exact ordered audio plan on its own non-reconnecting engine connection and sends
+only `start-verified` with the prepared attempt and the accepted proofs. A sole
+current receiver reporting the same vetted identity may be indistinguishable
+from the original; missing, different, ambiguous or unproved routes cannot start.
+The engine capability stays inert until a bench qualification row exists.
 
-A model or port token can open an unchanged address on a fresh Start, but the
-armed marker records that it cannot identify that input after engine loss.
-Legacy address-only markers stay on their existing address-based restore path:
-they do not apply the identity veto or acquire a physical identity from whoever
-now occupies the address.
+No audio and effective plans without a local leg use ordinary Start. Historical
+address-only markers retain their existing address-based restore path; they never
+gain a proof or physical identity from whoever now occupies their address.
 
 **Production v7.2 also reports `HDMIIN` / `RK3588 HDMI-IN`.** Rock's
 2026-09-18 raw ALSA inventory uses that third spelling, not `hdmirx`.

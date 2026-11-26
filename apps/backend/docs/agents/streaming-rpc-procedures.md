@@ -148,8 +148,9 @@ Validation, the codec gate, the probe, the engine request, every retry and the a
 marker read that snapshot (`asrc`, `audio_inputs`, `acodec`, `delay` and
 `audio_backend`), never the saved config.
 An omitted `audio_inputs` on Start uses the saved mix. An explicit `null`
-clears the mix for that Start and for the saved setup, unless a newer save
-owns the field. Clearing the mix does not select "No audio".
+clears the mix for that Start and, if the Start succeeds and no newer save
+owns the field, clears the saved mix and broadcasts `config_clear`.
+Clearing the mix does not select "No audio".
 So a "No audio" Start stays without audio, and a Start pressed with a microphone
 is judged on that microphone: if it does not answer, the Start is refused with
 `audio_source_probe_failed` even when "No audio" was saved meanwhile. Two reads stay
@@ -168,6 +169,9 @@ next-start saves. Status snapshots, updates and initial hydration carry it;
 Stop, engine idle or connection loss withdraw it. Only an active mix refuses
 `switchAudio` with `audio_mix_active`. A legacy session retains live source
 switching even after a mix is saved.
+A live mixer acknowledgement for a session replaced by Stop and Start replies
+with `audio_mix_not_saved`; it does not edit the successor's mix or broadcast
+saved settings.
 
 Status snapshots, the start and stop updates and the first post-sign-in status also carry
 `audio_off_active`: whether the running session was launched without audio by the

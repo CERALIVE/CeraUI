@@ -46,6 +46,7 @@ import {
 import {
 	type ConfigParameters,
 	getIsStreaming,
+	saveAppliedStartAudio,
 	startError,
 	updateConfig,
 	updateStatus,
@@ -185,6 +186,9 @@ export async function start(
 			undefined,
 			startAudio,
 		);
+		assertStreamLaunchOwnership();
+		if (result.success)
+			saveAppliedStartAudio(startAudio, c.pipeline.supportsAudio);
 	} catch (err) {
 		if (sessionResources?.generation === generation) {
 			sessionResources.removeNetworkInterfacesChangeListener();

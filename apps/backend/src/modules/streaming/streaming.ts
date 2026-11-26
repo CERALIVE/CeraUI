@@ -317,12 +317,6 @@ export async function updateConfig(
 		noteSourceSelectionWrite(params.source);
 	}
 
-	// Anything saved since the press is the next Start's and stays.
-	const { asrc, acodec, ...audio } = startAudio.unsaved();
-	Object.assign(config, audio);
-	if (pipeline.supportsAudio && acodec) config.acodec = acodec;
-	if (pipeline.supportsAudio && asrc) config.asrc = asrc;
-
 	if (params.relay_server) {
 		config.relay_server = params.relay_server;
 		config.srtla_addr = undefined;
@@ -353,4 +347,22 @@ export async function updateConfig(
 	broadcastConfig(config);
 
 	return { pipeline, srtlaAddr, srtlaPort, streamid };
+}
+
+/** A rejected Start must not save its proposed audio over the next-start choice. */
+export function saveAppliedStartAudio(
+	startAudio: StartAudio,
+	supportsAudio: boolean,
+) {
+	const config = getConfig();
+	const { asrc, acodec, ...fields } = startAudio.unsaved();
+	const applied = {
+		...fields,
+		...(supportsAudio && asrc ? { asrc } : {}),
+		...(supportsAudio && acodec ? { acodec } : {}),
+	};
+	if (Object.keys(applied).length === 0) return;
+	Object.assign(config, applied);
+	saveConfig();
+	broadcastConfig(config);
 }

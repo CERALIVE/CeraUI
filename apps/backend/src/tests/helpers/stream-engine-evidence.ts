@@ -1,11 +1,15 @@
 import type {
 	CerastreamClient,
+	CheckMicRoutesParams,
+	CheckMicRoutesResult,
 	EventParams,
 	StartParams,
 } from "@ceralive/cerastream";
 import {
+	ATTEMPT_SCOPED_START_FEATURE,
 	CerastreamRpcError,
 	CerastreamTimeoutError,
+	MIC_ROUTE_CHECK_FEATURE,
 } from "@ceralive/cerastream";
 import type { LifecycleState } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
@@ -39,9 +43,11 @@ export function evidenceHarness(
 	{
 		schemaVersion = "0.1.0",
 		connectPeer,
+		micRoutes,
 	}: {
 		readonly schemaVersion?: string;
 		readonly connectPeer?: CerastreamBackendDeps["connect"];
+		readonly micRoutes?: (params: CheckMicRoutesParams) => CheckMicRoutesResult;
 	} = {},
 ) {
 	let engine: "idle" | "streaming" = "idle";
@@ -123,7 +129,11 @@ export function evidenceHarness(
 				if (index === 0) await startGate;
 				if (lostStartReply !== undefined) throw lostStartReply;
 				if (failedStart) throw new CerastreamTimeoutError("start", 10_000);
-				return { state: "streaming" as const, session_id: `session-${index}` };
+				return {
+					state: "streaming" as const,
+					session_id: `session-${index}`,
+					attempt_id: params.attempt_id,
+				};
 			} finally {
 				startSettled.resolve();
 			}
@@ -135,8 +145,24 @@ export function evidenceHarness(
 				engine_version: "fake",
 			},
 			start,
-			prepareStart: unused,
-			cancelStart: unused,
+			prepareStart:
+				micRoutes === undefined
+					? unused
+					: async () => ({
+							attempt_id: crypto.randomUUID(),
+							expires_in_ms: 30_000,
+						}),
+			getAudioMix: unused,
+			setMeterTargets: unused,
+			switchAudio: unused,
+			cancelStart:
+				micRoutes === undefined ? unused : async (attempt) => attempt,
+			...(micRoutes === undefined
+				? {}
+				: {
+						checkMicRoutes: async (params: CheckMicRoutesParams) =>
+							micRoutes(params),
+					}),
 			// Newer schemas send Start through the raw request path.
 			...(schemaVersion === "0.1.0"
 				? {}
@@ -189,6 +215,11 @@ export function evidenceHarness(
 					bitrate_range: { min: 1, max: 8000, unit: "kbps" },
 				},
 				sources: [],
+				...(micRoutes === undefined
+					? {}
+					: {
+							features: [ATTEMPT_SCOPED_START_FEATURE, MIC_ROUTE_CHECK_FEATURE],
+						}),
 			}),
 			changeConfig: unused,
 			previewSession: unused,

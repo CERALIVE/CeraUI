@@ -4,14 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	ATTEMPT_SCOPED_START_FEATURE,
+	type CheckMicRoutesParams,
+	type CheckMicRoutesResult,
 	cancelStartSchema,
+	checkMicRoutesParamsSchema,
 	type EventParams,
 	type GetCapabilitiesResult,
+	MIC_ROUTE_CHECK_FEATURE,
 	RPC_ERROR_NUMERIC,
 	type RpcErrorCode,
 	rpcRequestSchema,
 	SCHEMA_VERSION,
 	type StartParams,
+	setBitrateParamsSchema,
 	startParamsSchema,
 } from "@ceralive/cerastream";
 
@@ -51,11 +56,20 @@ export type Scenario =
 	| "unknown";
 type Peer = { pending: string; prepared: boolean; index: number };
 
-export async function scopedStartPeer(scenario: Scenario) {
+export async function scopedStartPeer(
+	scenario: Scenario,
+	micRoutes?: (
+		request: CheckMicRoutesParams,
+	) => CheckMicRoutesResult | Promise<CheckMicRoutesResult>,
+) {
 	const dir = await mkdtemp(join(tmpdir(), "scoped-"));
 	const path = join(dir, "engine.sock");
 	const requests: { method: string; peer: number; attemptId?: string }[] = [];
 	const startAudio: StartParams["audio"][] = [];
+	const launchParams: StartParams[] = [];
+	const checks: { peer: number; params: CheckMicRoutesParams }[] = [];
+	let offerMicRoutes = micRoutes !== undefined;
+	let refuseVerified = false;
 	const entered = Promise.withResolvers<void>();
 	const negotiating = Promise.withResolvers<void>();
 	const sendLaunchStatus =
@@ -133,11 +147,16 @@ export async function scopedStartPeer(scenario: Scenario) {
 								reply({
 									...capabilities,
 									features:
-										scenario === "legacy" ||
-										scenario === "legacy-deadline" ||
-										scenario === "legacy-success"
-											? []
-											: [ATTEMPT_SCOPED_START_FEATURE],
+										micRoutes !== undefined
+											? [
+													ATTEMPT_SCOPED_START_FEATURE,
+													...(offerMicRoutes ? [MIC_ROUTE_CHECK_FEATURE] : []),
+												]
+											: scenario === "legacy" ||
+													scenario === "legacy-deadline" ||
+													scenario === "legacy-success"
+												? []
+												: [ATTEMPT_SCOPED_START_FEATURE],
 								});
 							}
 							break;
@@ -164,14 +183,29 @@ export async function scopedStartPeer(scenario: Scenario) {
 								reply({ attempt_id: attempt, expires_in_ms: 30_000 });
 							}
 							break;
-						case "start": {
+						case "check-mic-routes": {
+							const params = checkMicRoutesParamsSchema.parse(request.params);
+							checks.push({ peer: socket.data.index, params });
+							if (micRoutes === undefined)
+								throw new Error("unexpected route check");
+							void Promise.resolve(micRoutes(params)).then(reply);
+							break;
+						}
+						case "set-bitrate":
+							reply({ applied: setBitrateParamsSchema.parse(request.params) });
+							break;
+						case "start":
+						case "start-verified": {
 							const params = startParamsSchema.parse(request.params);
 							startAudio.push(params.audio);
+							launchParams.push(params);
 							if (params.attempt_id !== undefined)
 								record.attemptId = params.attempt_id;
 							entered.resolve();
 							if (params.attempt_id !== undefined && !socket.data.prepared)
 								refuse(notOwner);
+							else if (request.method === "start-verified" && refuseVerified)
+								refuse("cerastream.audio.device_not_found");
 							else if (scenario === "foreign") refuse(busy);
 							else if (scenario === "malformed") refuse("cerastream.internal");
 							else if (scenario === "cancelled") refuse(cancelled);
@@ -196,7 +230,11 @@ export async function scopedStartPeer(scenario: Scenario) {
 										}),
 									);
 								} else if (scenario === "legacy-success") {
-									reply({ session_id: "cs-1", state: "streaming" });
+									reply({
+										session_id: "cs-1",
+										state: "streaming",
+										attempt_id: params.attempt_id,
+									});
 								} else if (
 									scenario === "deadline" ||
 									scenario === "legacy-deadline"
@@ -245,8 +283,19 @@ export async function scopedStartPeer(scenario: Scenario) {
 		replyStart: replyStart.promise,
 		capabilityReads: () =>
 			requests.filter(({ method }) => method === "get-capabilities"),
-		starts: () => requests.filter(({ method }) => method === "start"),
+		starts: () =>
+			requests.filter(
+				({ method }) => method === "start" || method === "start-verified",
+			),
 		startAudio,
+		launchParams,
+		checks,
+		disableMicRoutes: () => {
+			offerMicRoutes = false;
+		},
+		refuseVerifiedStart: () => {
+			refuseVerified = true;
+		},
 		prepares: () => requests.filter(({ method }) => method === "prepare-start"),
 		cancels: () => requests.filter(({ method }) => method === "cancel-start"),
 		stops: () => requests.filter(({ method }) => method === "stop"),

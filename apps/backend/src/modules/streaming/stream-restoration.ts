@@ -102,6 +102,8 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 		snapshot.audio_physical_ids = launched.audio_physical_ids;
 	if (launched?.audio_unverified_ids !== undefined)
 		snapshot.audio_unverified_ids = launched.audio_unverified_ids;
+	if (launched?.mic_route_proofs !== undefined)
+		snapshot.mic_route_proofs = launched.mic_route_proofs;
 	if (launched?.audio_silenced) snapshot.audio_silenced = true;
 	copy("srt_latency");
 	copy("pipeline");
@@ -157,6 +159,7 @@ export function armStreamRestoration(
 	writeArmedStreamMarker(
 		{
 			armedAt: now(),
+			armId: crypto.randomUUID(),
 			bootId,
 			config: capture(),
 			...(options.diagnostics === undefined
@@ -364,9 +367,9 @@ function defaultDeps(): StreamRestorationDeps {
  * NEXT engine death would find an already-attempted marker and give up. Measured
  * on a board: SIGKILL #1 restored in 11.5 s, #2 and #3 did nothing at all.
  *
- * `armedAt` is the compare-and-set token — same shape as the source-selection
- * write token. A failed attempt commits nothing, so nothing re-arms, so the
- * terminal state lands exactly as before.
+ * `armId` distinguishes two launches even when they arm in the same millisecond.
+ * Historical markers have only `armedAt`. A failed attempt does not re-arm,
+ * so its terminal state still lands on the marker it judged.
  */
 function recordAttempt(
 	deps: StreamRestorationDeps,
@@ -376,7 +379,12 @@ function recordAttempt(
 	reason?: RecoveryFailureReason,
 ): void {
 	const current = readArmedStreamMarker(deps.marker);
-	if (current === undefined || current.armedAt !== judged.armedAt) return;
+	if (
+		current === undefined ||
+		current.armId !== judged.armId ||
+		current.armedAt !== judged.armedAt
+	)
+		return;
 	writeArmedStreamMarker(
 		{
 			...current,

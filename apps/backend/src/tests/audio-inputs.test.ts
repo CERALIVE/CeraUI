@@ -4,9 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ListDevicesResult } from "@ceralive/cerastream";
 import {
+	ATTEMPT_SCOPED_START_FEATURE,
+	type AudioConfig,
 	type AudioInputConfig,
+	checkMicRoutesParamsSchema,
 	connect,
 	type GetCapabilitiesResult,
+	MIC_ROUTE_CHECK_FEATURE,
 	PROTOCOL_VERSION,
 	type rpcErrorSchema,
 	rpcRequestSchema,
@@ -104,6 +108,19 @@ const entry = (id: string, tracks = [1]) => ({
 	mute: false,
 	delay_ms: 0,
 });
+const startRequest = ({ method }: { method: string }) =>
+	method === "start" || method === "start-verified";
+const fixtureProofs = (audio: AudioConfig) => {
+	const selectors =
+		audio.inputs?.map(({ input_id }) => input_id) ??
+		(audio.device === undefined ? [] : [audio.device]);
+	return selectors
+		.filter((id) => id !== "embedded")
+		.map(
+			(id) =>
+				`mic-report-v1:${new Bun.CryptoHasher("sha256").update(id).digest("hex")}`,
+		);
+};
 let directory: string;
 let previousPath: string;
 let previousConfig: ReturnType<typeof getConfig>;
@@ -175,7 +192,7 @@ beforeEach(async () => {
 					requests.push(request);
 					if (
 						engineError &&
-						["start", "set-audio-mix"].includes(request.method)
+						(startRequest(request) || request.method === "set-audio-mix")
 					) {
 						socket.write(
 							`${JSON.stringify({ jsonrpc: "2.0", id: request.id, error: engineError })}\n`,
@@ -187,29 +204,64 @@ beforeEach(async () => {
 						case "hello":
 							result = {
 								protocol: PROTOCOL_VERSION,
-								schema_version: "0.24.0",
+								schema_version: SCHEMA_VERSION,
 								engine_version: "test",
 							};
 							break;
+						case "get-capabilities":
+							result = {
+								...caps,
+								features: [
+									ATTEMPT_SCOPED_START_FEATURE,
+									MIC_ROUTE_CHECK_FEATURE,
+								],
+							};
+							break;
+						case "prepare-start":
+							result = {
+								attempt_id: crypto.randomUUID(),
+								expires_in_ms: 30_000,
+							};
+							break;
+						case "cancel-start":
+							result = request.params;
+							break;
+						case "check-mic-routes": {
+							const { audio, operation } = checkMicRoutesParamsSchema.parse(
+								request.params,
+							);
+							const proofs = fixtureProofs(audio);
+							result =
+								operation.kind === "verify" &&
+								!Bun.deepEquals(operation.expected, proofs)
+									? { status: "mismatch" }
+									: { status: "checked", proofs };
+							break;
+						}
 						case "subscribe-events":
 							if (JSON.stringify(request.params).includes("audio-level"))
 								meterSocket = socket;
 							result = { subscribed: ["audio-level"] };
 							break;
 						case "start":
-							engineInputs = structuredClone(
-								startParamsSchema.parse(request.params).audio?.inputs ?? [],
-							);
-							result = { session_id: "audio-inputs", state: "streaming" };
+						case "start-verified": {
+							const params = startParamsSchema.parse(request.params);
+							engineInputs = structuredClone(params.audio?.inputs ?? []);
+							result = {
+								session_id: "audio-inputs",
+								state: "streaming",
+								attempt_id: params.attempt_id,
+							};
 							if (holdStart) {
 								releaseStart = () =>
 									socket.write(
-										`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { session_id: "audio-inputs", state: "streaming" } })}\n`,
+										`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`,
 									);
 								startObserved.resolve();
 								continue;
 							}
 							break;
+						}
 						case "set-audio-mix": {
 							const updates = setAudioMixParamsSchema.parse(
 								request.params,
@@ -307,10 +359,14 @@ async function start() {
 		host: "127.0.0.1",
 		port: 9000,
 		streamid: "audio-inputs",
+		micRoute: {
+			attemptId: "audio-inputs",
+			legacyAddressOnly: false,
+			expected: async (audio) => fixtureProofs(audio),
+			applied: () => {},
+		},
 	});
-	return startParamsSchema.parse(
-		requests.find((r) => r.method === "start")?.params,
-	);
+	return startParamsSchema.parse(requests.find(startRequest)?.params);
 }
 function routeLiveProcedure() {
 	updateStatus(true);

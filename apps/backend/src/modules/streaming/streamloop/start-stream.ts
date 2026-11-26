@@ -34,7 +34,10 @@ import {
 	resetActiveEncodeLiveness,
 	resetActivePassthrough,
 } from "../active-passthrough.ts";
-import { pinLaunchedAudio } from "../armed-stream-marker.ts";
+import {
+	type LaunchedAudio,
+	pinLaunchedAudio,
+} from "../armed-stream-marker.ts";
 import {
 	type AudioIdentityEvidence,
 	asrcProbe,
@@ -44,6 +47,7 @@ import {
 	NO_AUDIO_ID,
 	refreshBluetoothAudioDevices,
 } from "../audio.ts";
+import { audioInputEngineId, effectiveAudioInputs } from "../audio-inputs.ts";
 import {
 	defaultBindMapSpawnDeps,
 	resolveBindMapArgs,
@@ -61,6 +65,7 @@ import {
 	startLinkTelemetry,
 	stopLinkTelemetry,
 } from "../link-telemetry.ts";
+import { freezeMicChoices, micRouteKeys } from "../mic-route-admission.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { replayPreviewEncodeMode } from "../preview-encode-replay.ts";
 import { getLastPublishedBond } from "../srtla.ts";
@@ -244,6 +249,10 @@ export async function startStream(
 			? new Map(startAudio.audioEvidence).set(chosen, autoEvidence)
 			: startAudio.audioEvidence;
 	const audioOff = config.asrc === NO_AUDIO_ID;
+	const micChoices =
+		wasAuto && startAudio.restoration === undefined
+			? freezeMicChoices(launchConfig, saved, startAudio.micChoices, audioOff)
+			: startAudio.micChoices;
 	startStreamDeps.getStreamingBackend().setBitrate(launchConfig);
 
 	// A fresh stream start clears any prior unexpected-exit health flag so the
@@ -341,6 +350,9 @@ export async function startStream(
 		});
 		transaction.register(() => startStreamDeps.stopLinkTelemetry());
 
+		let launchedAudio: LaunchedAudio | undefined;
+		let launchedAsrc: RuntimeConfig["asrc"];
+		let originalKeys: ReadonlyMap<string, string>;
 		await startStreamDeps.getStreamingBackend().start(
 			// The bitrate is live: a change made while starting still applies.
 			configOverride === undefined
@@ -380,7 +392,9 @@ export async function startStream(
 								AUDIO_SOURCE_PROBE_FAILED,
 							),
 						);
-					pinLaunchedAudio({
+					originalKeys = resolved.originalKeys;
+					launchedAsrc = resolved.asrc;
+					launchedAudio = {
 						...audio,
 						asrc:
 							wasAuto && autoEvidence === undefined
@@ -389,8 +403,55 @@ export async function startStream(
 						audio_inputs: resolved.audio_inputs,
 						audio_physical_ids: resolved.audio_physical_ids,
 						audio_unverified_ids: resolved.audio_unverified_ids,
-					});
+					};
 					return { asrc: resolved.asrc, audio_inputs: resolved.audio_inputs };
+				},
+				micRoute: {
+					attemptId,
+					legacyAddressOnly: startAudio.restoration?.legacyAddressOnly === true,
+					expected: async (audio) => {
+						if (startAudio.restoration !== undefined)
+							return startAudio.restoration.proofs;
+						if (launchedAudio === undefined) return undefined;
+						const projected = {
+							...launchConfig,
+							...launchedAudio,
+							asrc: launchedAsrc,
+						};
+						const ids =
+							audio.inputs === undefined
+								? [projected.asrc]
+								: micRouteKeys(audio).map(
+										(key) =>
+											effectiveAudioInputs(projected)?.find(
+												({ id }) => audioInputEngineId(id, projected) === key,
+											)?.id,
+									);
+						const proofs = await Promise.all(
+							ids.map((id) =>
+								id === undefined
+									? undefined
+									: micChoices.get(
+											originalKeys.get(id) ?? startAudio.originalMicChoice(id),
+										),
+							),
+						);
+						return proofs.every((proof) => proof !== undefined)
+							? proofs
+							: undefined;
+					},
+					applied: (proofs, backend) => {
+						if (launchedAudio !== undefined)
+							pinLaunchedAudio({
+								...launchedAudio,
+								...(proofs === undefined ? {} : { asrc: launchedAsrc }),
+								...(backend === undefined ? {} : { audio_backend: backend }),
+								// An empty applied batch is not a historical address-only marker.
+								mic_route_proofs:
+									proofs ??
+									(startAudio.restoration?.legacyAddressOnly ? undefined : []),
+							});
+					},
 				},
 			},
 			transaction,

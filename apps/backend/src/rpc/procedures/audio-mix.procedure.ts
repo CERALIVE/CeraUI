@@ -21,6 +21,7 @@ import {
 	getAudioMixInputs,
 } from "../../modules/streaming/audio-mix-status.ts";
 import { cerastreamBackend } from "../../modules/streaming/cerastream-backend.ts";
+import { noteMicChoice } from "../../modules/streaming/mic-route-admission.ts";
 import { noteAudioSaved } from "../../modules/streaming/start-audio.ts";
 import { captureLiveWriteFence } from "../../modules/streaming/stream-session-orchestrator.ts";
 import { broadcastConfig } from "../config-broadcast.ts";
@@ -38,11 +39,15 @@ export const setAudioMixProcedure = os
 		const config = getConfig();
 		// Composed and written in this synchronous stretch, so edits serialize.
 		if (include !== undefined || track !== undefined) {
+			const previouslyIncluded = effectiveAudioInputs(config)?.some(
+				(input) => input.id === id,
+			);
 			const changed = changedAudioInputs(config, id, { include, track });
 			if ("error" in changed) return { success: false, error: changed.error };
 			config.audio_inputs = storedAudioInputs(changed.inputs, config);
 			noteAudioSaved("audio_inputs");
 			saveConfig();
+			if (include === true && !previouslyIncluded) noteMicChoice(config, id);
 			broadcastConfig(config);
 			const entry = changed.inputs.find((input) => input.id === id);
 			return {
@@ -90,12 +95,19 @@ export const setAudioMixProcedure = os
 			const ownsWrite = captureLiveWriteFence();
 			const params = { inputs: [{ input_id: running.input_id, ...update }] };
 			try {
-				const result = shouldUseMocks()
+				const mocked = shouldUseMocks();
+				const result = mocked
 					? setMockAudioMix(params)
 					: await cerastreamBackend.setAudioMix(params);
 				// The engine answered for the old stream, not the current settings.
 				if (!ownsWrite())
 					return { success: false, error: "stream_ended_before_audio_saved" };
+				// A successor can have the same input ID, but not the same session row.
+				if (
+					!mocked &&
+					(!getAudioMixActive() || !getAudioMixInputs()?.includes(running))
+				)
+					return { success: false, error: "audio_mix_not_saved" };
 				const state = result.inputs.find(
 					(input) => input.input_id === running.input_id,
 				);

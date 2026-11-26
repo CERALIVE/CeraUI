@@ -24,6 +24,7 @@ export function currentStreamLaunchOwner(): () => boolean {
 
 export type LaunchRollback =
 	| { readonly kind: "transaction"; readonly run: () => Promise<void> }
+	| { readonly kind: "mic-preflight"; readonly run: () => Promise<void> }
 	| { readonly kind: "legacy-dispatched" };
 
 export function registerLaunchRollback(rollback: LaunchRollback): void {

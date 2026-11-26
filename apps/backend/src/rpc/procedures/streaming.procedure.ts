@@ -113,6 +113,7 @@ import { deviceRegistry } from "../../modules/streaming/devices.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { isGatewayActive } from "../../modules/streaming/gateway-availability.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
+import { noteMicChoice } from "../../modules/streaming/mic-route-admission.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import {
 	getEffectiveHardware,
@@ -1003,6 +1004,7 @@ export const setConfigProcedure = liveWriteProcedure
 			config.asrc = input.asrc;
 			noteAudioSaved("asrc");
 		}
+		const previousAudioInputs = config.audio_inputs;
 		if (audioInputs !== undefined) {
 			config.audio_inputs = storedAudioInputs(audioInputs, audioConfig);
 			noteAudioSaved("audio_inputs");
@@ -1180,6 +1182,15 @@ export const setConfigProcedure = liveWriteProcedure
 		}
 
 		saveConfig();
+		if (input.asrc !== undefined && input.audio_pick === true)
+			noteMicChoice(config, input.asrc);
+		for (const { id } of config.audio_inputs ?? []) {
+			if (
+				!previousAudioInputs?.some((input) => input.id === id) &&
+				id !== input.asrc
+			)
+				noteMicChoice(config, id);
+		}
 		broadcastConfig(config);
 		reportActiveProfile();
 		if (input.audio_backend !== undefined) {

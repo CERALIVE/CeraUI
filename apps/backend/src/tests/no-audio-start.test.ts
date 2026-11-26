@@ -87,6 +87,7 @@ import {
 	noteStreamSessionEngineStatus,
 	reconcileStreamSession,
 	retireLostStreamSession,
+	stopStreamSession,
 } from "../modules/streaming/stream-session-orchestrator.ts";
 import { streamSessionProductionDeps } from "../modules/streaming/stream-session-production.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
@@ -178,6 +179,38 @@ let previousConfig: ReturnType<typeof getConfig>;
 let previousIps: string | undefined;
 const env = { ...process.env };
 let engine: ReturnType<typeof evidenceHarness>;
+const micReports = new Map<string, string>();
+const reportProof = (report: string) =>
+	`mic-report-v1:${new Bun.CryptoHasher("sha256").update(report).digest("hex")}`;
+
+function testMicRoutes(
+	request: Parameters<NonNullable<CerastreamClient["checkMicRoutes"]>>[0],
+): Awaited<ReturnType<NonNullable<CerastreamClient["checkMicRoutes"]>>> {
+	const keys =
+		request.audio.inputs === undefined
+			? [request.audio.device].filter((key) => key !== undefined)
+			: request.audio.inputs
+					.map((input) => input.device ?? input.input_id)
+					.filter((key) => key !== "embedded" && key !== "silence");
+	if (keys.length === 0) return { status: "not_required" };
+	const proofs = keys.map((key) =>
+		reportProof(micReports.get(key.toLowerCase()) ?? key.toLowerCase()),
+	);
+	if (new Set(proofs).size !== proofs.length) return { status: "ambiguous" };
+	if (
+		request.operation.kind === "verify" &&
+		!Bun.deepEquals(proofs, request.operation.expected)
+	)
+		return { status: "mismatch" };
+	return { status: "checked", proofs };
+}
+
+function supportedEngine() {
+	return evidenceHarness(false, {
+		schemaVersion: SCHEMA_VERSION,
+		micRoutes: testMicRoutes,
+	});
+}
 let probe: { mock: { calls: unknown[][] } };
 let gate: ReturnType<typeof Promise.withResolvers<void>>;
 let reached: ReturnType<typeof Promise.withResolvers<void>>;
@@ -265,7 +298,14 @@ beforeEach(async () => {
 	});
 	gate = Promise.withResolvers<void>();
 	reached = Promise.withResolvers<void>();
-	engine = evidenceHarness(false, { schemaVersion: "0.24.0" });
+	micReports.clear();
+	engine = supportedEngine();
+	spyOn(cerastreamBackend, "admitMicRoutes").mockImplementation(
+		async (request) => {
+			const result = testMicRoutes(request);
+			return result.status === "checked" ? result.proofs : undefined;
+		},
+	);
 	setStartStreamDepsForTest({
 		getStreamingBackend: () => engine.backend,
 		spawnStreamingLoop: () =>
@@ -303,6 +343,7 @@ beforeEach(async () => {
 afterEach(async () => {
 	gate.resolve();
 	await stop();
+	pinLaunchedAudio(undefined);
 	jest.restoreAllMocks();
 	setStartStreamDepsForTest(null);
 	setPreviewEncodeReplayTransport(null);
@@ -529,19 +570,44 @@ const newerMix = [entry("Primary", [1]), entry("Second", [1])];
 const context = () => ({ context: makeRpcContext() });
 
 test("a Start requesting a cleared mix does not fall back to the saved mix", async () => {
+	const peer = await scopedStartPeer("legacy-success", testMicRoutes);
+	useRoutePeer(peer);
+	keepMarker();
 	getConfig().asrc = "Primary";
 	saveConfig();
-
-	expect(await uiStart("Primary", { audio_inputs: null })).toMatchObject({
-		success: true,
-	});
-	expect(launchedAudio()).toEqual([device("Primary")]);
-	expect(await disk()).not.toHaveProperty("audio_inputs");
+	broadcastConfig(getConfig());
+	const sent: string[] = [];
+	const { ws: tab } = makeRpcContext(sent);
+	addClient(tab);
+	try {
+		expect(await uiStart("Primary", { audio_inputs: null })).toMatchObject({
+			success: true,
+		});
+		expect(peer.startAudio).toEqual([device("Primary")]);
+		expect(peer.starts().map(({ method }) => method)).toEqual([
+			"start-verified",
+		]);
+		expect(readArmedStreamMarker()?.config.mic_route_proofs).toEqual([
+			reportProof("hw:card=primary"),
+		]);
+		expect(await disk()).not.toHaveProperty("audio_inputs");
+		const frames = sent.map((frame) => JSON.parse(frame));
+		const clearIndex = frames.findIndex((frame) => "config_clear" in frame);
+		expect(frames[clearIndex - 1]?.config).not.toHaveProperty("audio_inputs");
+		expect(frames[clearIndex]?.config_clear).toEqual({
+			keys: ["audio_inputs"],
+		});
+	} finally {
+		removeClient(tab);
+	}
 });
 
 test.each(["settings", "membership", "level"] as const)(
 	"a %s clear reaches the other tab without changing the already admitted mix",
 	async (writer) => {
+		const peer = await scopedStartPeer("legacy-success", testMicRoutes);
+		useRoutePeer(peer);
+		keepMarker();
 		getConfig().asrc = "Primary";
 		getConfig().audio_inputs =
 			writer === "level"
@@ -580,13 +646,24 @@ test.each(["settings", "membership", "level"] as const)(
 				gate.resolve();
 				expect(await started).toMatchObject({ success: true });
 			}
-			expect(launchedAudio()).toEqual([
+			expect(peer.startAudio).toEqual([
 				{ mode: "default", inputs: mixOnTheWire, delay_ms: 0 },
+			]);
+			expect(readArmedStreamMarker()?.config.mic_route_proofs).toEqual([
+				reportProof("hw:card=primary"),
+				reportProof("hw:card=second"),
 			]);
 			expect(await disk()).not.toHaveProperty("audio_inputs");
 			await stop();
 			expect(await start()).toMatchObject({ success: true });
-			expect(launchedAudio()[1]).toEqual(device("Primary"));
+			expect(peer.startAudio[1]).toEqual(device("Primary"));
+			expect(peer.starts().map(({ method }) => method)).toEqual([
+				"start-verified",
+				"start-verified",
+			]);
+			expect(readArmedStreamMarker()?.config.mic_route_proofs).toEqual([
+				reportProof("hw:card=primary"),
+			]);
 		} finally {
 			removeClient(tab);
 		}
@@ -911,17 +988,21 @@ const holdStreamSubscription = () =>
 		};
 	});
 /** An engine that prepares a scoped attempt before its Start request. */
+const rekeyAttempt = "40cc1000-7013-42ca-8994-6808596684eb";
 const scopedEngine = (held: "getCapabilities" | "prepareStart") => {
 	engine.dispose();
-	engine = evidenceHarness(false, { schemaVersion: "0.25.0" });
+	engine = supportedEngine();
 	wrapClient(() => ({
 		getCapabilities: async () => {
 			if (held === "getCapabilities") await hold();
-			return { ...CAPS, features: [ATTEMPT_SCOPED_START_FEATURE] };
+			return {
+				...CAPS,
+				features: [ATTEMPT_SCOPED_START_FEATURE, "mic-route-check"],
+			};
 		},
 		prepareStart: async () => {
 			if (held === "prepareStart") await hold();
-			return { attempt_id: "attempt-1", expires_in_ms: 10_000 };
+			return { attempt_id: rekeyAttempt, expires_in_ms: 10_000 };
 		},
 		cancelStart: async (attempt: unknown) => attempt,
 	}));
@@ -1164,7 +1245,10 @@ test.each(EVERY_AWAIT)(
 		expect(launchedAudio()).toEqual([PRESSED[asrc][shape]]);
 		expect(probe.mock.calls.at(-1)).toEqual(PROBED[asrc]);
 		expect((await offActive()).snapshot).toBe(asrc === "No audio");
-		expect(captureArmedStreamConfig()).toMatchObject({ asrc, delay: 0 });
+		expect(captureArmedStreamConfig()).toMatchObject({
+			asrc: asrc === "Auto" ? "Third" : asrc,
+			delay: 0,
+		});
 		if (shape === "mix") expect(result.applied?.asrc).toBe(asrc);
 		await expectSaved(asrc, shape, choice);
 
@@ -1411,6 +1495,7 @@ test.each(["update admission", "start retry wait"])(
 		const devices = { Third: "hw:CARD=third" };
 		audio.reconcileConfiguredAudioIdentity(identities, devices, remembered);
 		audio.setMockAudioDevicesProvider(() => ({ ...devices }));
+		micReports.set("hw:card=third", "hw:card=second");
 		const successor = audio.audioIdentitySuccessor;
 		spyOn(audio, "audioIdentitySuccessor").mockImplementation((asrc) =>
 			successor(asrc, identities, devices, remembered),
@@ -1484,7 +1569,7 @@ test.each(["its stop", "update admission"])(
 // The production marker, its hooks, the restoration runner and its own launch.
 
 let armed: string | undefined;
-function keepMarker() {
+function keepMarker(now = Date.now) {
 	armed = undefined;
 	const marker = defaultArmedStreamMarkerDeps;
 	spyOn(marker, "readBootId").mockReturnValue("boot");
@@ -1496,7 +1581,7 @@ function keepMarker() {
 		armed = undefined;
 	});
 	spyOn(streamSessionProductionDeps, "onStreamArmed").mockImplementation(() => {
-		armStreamRestoration();
+		armStreamRestoration({ now });
 	});
 }
 /** The control link drops; the engine itself may still run. */
@@ -1608,8 +1693,8 @@ const delayLive = (delay_ms: number) =>
 	call(reloadAudioDelayProcedure, { delay_ms }, context());
 const switchLive = (audio_input_id: string) =>
 	call(switchAudioProcedure, { audio_input_id }, context());
-async function running(asrc: string, shape: Shape) {
-	keepMarker();
+async function running(asrc: string, shape: Shape, now?: () => number) {
+	keepMarker(now);
 	savePressed(asrc, shape);
 	expect(await start()).toMatchObject({ success: true });
 }
@@ -1617,6 +1702,44 @@ async function running(asrc: string, shape: Shape) {
 const mutedSecond = mixed(wire("Primary", [1]), {
 	...wire("Second", [2]),
 	mute: true,
+});
+
+test("late live mix success after Stop and verified Start is not saved", async () => {
+	liveEngine(async (update) => {
+		await hold();
+		return update;
+	});
+	await running("Primary", "mix");
+	const pending = editMix("Second", { mute: true });
+	await reached.promise;
+	try {
+		await stop();
+		expect(await start()).toMatchObject({ success: true });
+		const successor = readArmedStreamMarker();
+		expect(successor?.config.mic_route_proofs).toEqual([
+			reportProof("hw:card=primary"),
+			reportProof("hw:card=second"),
+		]);
+		const saved = await Bun.file(getConfigFilePath()).text();
+		const sent: string[] = [];
+		const { ws: tab } = makeRpcContext(sent);
+		addClient(tab);
+		try {
+			gate.resolve();
+			expect(await pending).toEqual({
+				success: false,
+				error: "audio_mix_not_saved",
+			});
+			expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
+			expect(readArmedStreamMarker()).toEqual(successor);
+			expect(sent).toEqual([]);
+		} finally {
+			removeClient(tab);
+		}
+	} finally {
+		gate.resolve();
+		await pending;
+	}
 });
 
 test.each([
@@ -1790,7 +1913,7 @@ test("a live mute is still on after an engine restart, and a mix edited for the 
 
 test("a live mute is still on after a second engine restart", async () => {
 	liveEngine();
-	await running("Primary", "mix");
+	await running("Primary", "mix", () => 1_000);
 	await liveEdit("Second", { mute: true });
 	await restart();
 	expect(await restart()).toEqual(mutedSecond);
@@ -2085,6 +2208,7 @@ test("a marker from before the mix was recorded restores its pick with the saved
 	await running("Primary", "mix");
 	const marker = JSON.parse(armed ?? "");
 	delete marker.config.audio_inputs;
+	delete marker.config.mic_route_proofs;
 	armed = JSON.stringify(marker);
 	getConfig().asrc = "Second";
 	getConfig().audio_inputs = structuredClone(otherMix);
@@ -2255,6 +2379,10 @@ function reenumerate(from: string, to: string) {
 		Third: "hw:CARD=third",
 	};
 	Reflect.deleteProperty(devices, from);
+	micReports.set(
+		`hw:card=${to.toLowerCase()}`,
+		`hw:card=${from.toLowerCase()}`,
+	);
 	const successor = audio.audioIdentitySuccessor;
 	audio.setMockAudioDevicesProvider(() => ({ ...devices }));
 	spyOn(audio, "audioIdentitySuccessor").mockImplementation((asrc) =>
@@ -2349,6 +2477,8 @@ async function answerPhysicalMics(
 		readonly [id: string, stableId: string, physicalGroupId?: string]
 	>
 ) {
+	for (const [id, stableId] of cards)
+		micReports.set(`hw:card=${id.toLowerCase()}`, stableId);
 	await refreshEngineDeviceCache({
 		fetchEngineDevices: async () => ({
 			devices: cards.map(([id, stable_id, physical_group_id]) => ({
@@ -2362,6 +2492,31 @@ async function answerPhysicalMics(
 			})),
 		}),
 	});
+}
+
+function useRoutePeer(
+	peer: Awaited<ReturnType<typeof scopedStartPeer>>,
+	requestTimeoutMs?: number,
+) {
+	const clients: CerastreamClient[] = [];
+	onTestFinished(async () => {
+		for (const client of clients) await client.close();
+	});
+	engine.dispose();
+	engine = evidenceHarness(false, {
+		connectPeer: async (opts) => {
+			const client = await connect({
+				...opts,
+				socketPath: peer.path,
+				requestTimeoutMs: opts?.requestTimeoutMs ?? requestTimeoutMs,
+			});
+			clients.push(client);
+			return client;
+		},
+	});
+	spyOn(cerastreamBackend, "admitMicRoutes").mockImplementation((request) =>
+		engine.backend.admitMicRoutes(request),
+	);
 }
 
 test.each([
@@ -2392,19 +2547,15 @@ test.each([
 		missing,
 		legacy,
 	}) => {
-		const peer = await scopedStartPeer("legacy-success");
-		const clients: CerastreamClient[] = [];
-		onTestFinished(async () => {
-			for (const client of clients) await client.close();
+		let nativeReport = ORIGINAL_MIC;
+		const peer = await scopedStartPeer("legacy-success", (request) => {
+			const proof = reportProof(nativeReport);
+			return request.operation.kind === "verify" &&
+				!Bun.deepEquals(request.operation.expected, [proof])
+				? { status: "mismatch" }
+				: { status: "checked", proofs: [proof] };
 		});
-		engine.dispose();
-		engine = evidenceHarness(false, {
-			connectPeer: async (opts) => {
-				const client = await connect({ ...opts, socketPath: peer.path });
-				clients.push(client);
-				return client;
-			},
-		});
+		useRoutePeer(peer);
 		setEngineAudioChangeHandler(() => {});
 		const sameRow = ["micOld", ORIGINAL_MIC, "usb:5-1"] as const;
 		const original = {
@@ -2428,6 +2579,21 @@ test.each([
 			saveConfig();
 			expect(await start()).toMatchObject({ success: true });
 			expect(peer.startAudio).toEqual([expectedAudio]);
+			expect(peer.starts()).toEqual([
+				{
+					method: "start-verified",
+					peer: peer.prepares()[0]?.peer,
+					attemptId: rekeyAttempt,
+				},
+			]);
+			expect(peer.checks.map(({ params }) => params.operation.kind)).toEqual([
+				"admit",
+				"verify",
+			]);
+			expect(peer.checks[1]?.peer).toBe(peer.starts()[0]?.peer);
+			expect(peer.launchParams[0]?.mic_route_proofs).toEqual([
+				reportProof(ORIGINAL_MIC),
+			]);
 			expect(readArmedStreamMarker()?.config.audio_physical_ids).toEqual({
 				micOld: ORIGINAL_MIC,
 			});
@@ -2438,12 +2604,14 @@ test.each([
 				const {
 					audio_physical_ids: _physical,
 					audio_unverified_ids: _unverified,
+					mic_route_proofs: _proofs,
 					...config
 				} = marker.config;
 				armed = JSON.stringify({ ...marker, config });
 			}
 
 			await loseEngine();
+			if (differentId || product !== undefined) nativeReport = UNRELATED_MIC;
 			await audio.updateAudioDevices(
 				await physicalMicScan(duplicate ? ["micOld", "micTwin"] : ["micOld"], {
 					instance: instance ?? "other",
@@ -2519,6 +2687,237 @@ test.each([
 	},
 );
 
+test.each([
+	"unsupported",
+	"non-proof",
+	"stale report",
+	"wrong proof",
+	"refused admission",
+] as const)(
+	"verified microphone Start refuses %s with no ordinary fallback or config write",
+	async (scenario) => {
+		const admitted = Promise.withResolvers<void>();
+		const original = reportProof(ORIGINAL_MIC);
+		const other = reportProof(UNRELATED_MIC);
+		const peer = await scopedStartPeer("legacy-success", ({ operation }) => {
+			if (operation.kind === "admit") {
+				admitted.resolve();
+				return scenario === "refused admission"
+					? { status: "unavailable" }
+					: { status: "checked", proofs: [original] };
+			}
+			if (scenario === "unsupported")
+				return { status: "checked", proofs: [original] };
+			if (scenario === "non-proof") return { status: "not_required" };
+			if (scenario === "stale report") return { status: "mismatch" };
+			return { status: "checked", proofs: [other] };
+		});
+		useRoutePeer(peer);
+		getConfig().audio_inputs = undefined;
+		getConfig().audio_backend = "pipewire";
+		expect(await pick("Primary")).toMatchObject({ success: true });
+		await admitted.promise;
+		if (scenario === "unsupported") peer.disableMicRoutes();
+		const saved = await Bun.file(getConfigFilePath()).text();
+
+		expect(await start({ delay: 123 })).toMatchObject({
+			success: false,
+			failure: { class: "audio_source_unavailable" },
+		});
+		expect(peer.checks.map(({ params }) => params.operation.kind)).toEqual(
+			scenario === "unsupported" || scenario === "refused admission"
+				? ["admit"]
+				: ["admit", "verify"],
+		);
+		expect(peer.starts()).toEqual([]);
+		expect(peer.stops()).toEqual([]);
+		expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
+	},
+);
+
+test.each(["alsa", "pipewire"] as const)(
+	"picker and muted mix leg apply one ordered verified Start on %s",
+	async (backend) => {
+		const peer = await scopedStartPeer("legacy-success", testMicRoutes);
+		useRoutePeer(peer);
+		keepMarker();
+		getConfig().audio_backend = backend;
+		getConfig().audio_inputs = undefined;
+		expect(await pick("Primary")).toMatchObject({ success: true });
+		expect(
+			await call(
+				setConfigProcedure,
+				{
+					audio_inputs: [
+						entry("Primary", [1]),
+						{ ...entry("Second", [2]), mute: true },
+					],
+				},
+				context(),
+			),
+		).toMatchObject({ success: true });
+		expect(readArmedStreamMarker()).toBeUndefined();
+
+		expect(await start()).toMatchObject({ success: true });
+		const expected = [
+			reportProof("hw:card=primary"),
+			reportProof("hw:card=second"),
+		];
+		const audio = {
+			...mixed(wire("Primary", [1]), { ...wire("Second", [2]), mute: true }),
+			backend,
+		};
+		expect(peer.starts()).toEqual([
+			{
+				method: "start-verified",
+				peer: peer.prepares()[0]?.peer,
+				attemptId: rekeyAttempt,
+			},
+		]);
+		expect(peer.startAudio).toEqual([audio]);
+		expect(
+			peer.checks.filter(({ params }) => params.operation.kind === "verify"),
+		).toEqual([
+			{
+				peer: peer.starts()[0]?.peer,
+				params: {
+					audio,
+					network: false,
+					operation: { kind: "verify", expected },
+				},
+			},
+		]);
+		expect(peer.launchParams[0]?.mic_route_proofs).toEqual(expected);
+		expect(peer.capabilityReads()).toContainEqual({
+			method: "get-capabilities",
+			peer: peer.starts()[0]?.peer,
+		});
+		expect(readArmedStreamMarker()?.config.mic_route_proofs).toEqual(expected);
+		expect(await disk()).not.toHaveProperty("mic_route_proofs");
+	},
+);
+
+test.each(["settings", "mixer"] as const)(
+	"a %s mix inclusion freezes the new leg's proof at the save",
+	async (writer) => {
+		const admitted = Promise.withResolvers<void>();
+		const peer = await scopedStartPeer("legacy-success", (params) => {
+			const result = testMicRoutes(params);
+			if (
+				params.operation.kind === "admit" &&
+				params.audio.device?.toLowerCase() === "hw:card=second"
+			)
+				admitted.resolve();
+			return result;
+		});
+		useRoutePeer(peer);
+		keepMarker();
+		getConfig().asrc = "Primary";
+		getConfig().audio_inputs = undefined;
+		expect(
+			writer === "settings"
+				? await call(
+						setConfigProcedure,
+						{ audio_inputs: [entry("Primary", [1]), entry("Second", [1])] },
+						context(),
+					)
+				: await editMix("Second", { include: true }),
+		).toMatchObject({ success: true });
+		await admitted.promise;
+		micReports.set("hw:card=second", UNRELATED_MIC);
+		const saved = await Bun.file(getConfigFilePath()).text();
+
+		expect(await start()).toMatchObject({
+			success: false,
+			failure: { class: "audio_source_unavailable" },
+		});
+		expect(
+			peer.checks.find(({ params }) => params.operation.kind === "verify")
+				?.params.operation,
+		).toEqual({
+			kind: "verify",
+			expected: [reportProof("hw:card=primary"), reportProof("hw:card=second")],
+		});
+		expect(peer.starts()).toEqual([]);
+		expect(readArmedStreamMarker()).toBeUndefined();
+		expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
+	},
+);
+
+test("a verified Start rejection cannot fall back or apply its proof to the marker", async () => {
+	const peer = await scopedStartPeer("legacy-success", testMicRoutes);
+	peer.refuseVerifiedStart();
+	useRoutePeer(peer);
+	keepMarker();
+	expect(await pick("Primary")).toMatchObject({ success: true });
+	const saved = await Bun.file(getConfigFilePath()).text();
+
+	expect(await start({ delay: 100 })).toMatchObject({ success: false });
+	expect(peer.starts().map(({ method }) => method)).toEqual(["start-verified"]);
+	expect(peer.stops()).toEqual([]);
+	expect(readArmedStreamMarker()).toBeUndefined();
+	expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
+});
+
+test("No audio skips proof traffic even with local legs saved on an older runtime", async () => {
+	const peer = await scopedStartPeer("legacy-success");
+	useRoutePeer(peer);
+	keepMarker();
+	const saved = await Bun.file(getConfigFilePath()).text();
+
+	expect(await start()).toMatchObject({ success: true });
+	expect(peer.starts().map(({ method }) => method)).toEqual(["start"]);
+	expect(peer.startAudio).toEqual([silent]);
+	expect(peer.checks).toEqual([]);
+	expect(readArmedStreamMarker()?.config.mic_route_proofs).toEqual([]);
+	expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
+});
+
+test.each(["Stop", "socket retirement", "request deadline"] as const)(
+	"a verified microphone reply after %s cannot Start or Stop another stream",
+	async (boundary) => {
+		const entered = Promise.withResolvers<void>();
+		const reply = Promise.withResolvers<{
+			status: "checked";
+			proofs: string[];
+		}>();
+		const proof = reportProof(ORIGINAL_MIC);
+		const peer = await scopedStartPeer("legacy-success", ({ operation }) => {
+			if (operation.kind === "admit")
+				return { status: "checked", proofs: [proof] };
+			entered.resolve();
+			return reply.promise;
+		});
+		useRoutePeer(peer, boundary === "request deadline" ? 500 : undefined);
+		keepMarker();
+		getConfig().audio_inputs = undefined;
+		expect(await pick("Primary")).toMatchObject({ success: true });
+		const saved = await Bun.file(getConfigFilePath()).text();
+		const started = start();
+		try {
+			expect(
+				await Promise.race([
+					entered.promise.then(() => "verifying"),
+					started.then(() => "completed"),
+				]),
+			).toBe("verifying");
+			if (boundary === "Stop")
+				expect(await stopStreamSession("operator")).toEqual({
+					result: "stopped",
+				});
+			else if (boundary === "socket retirement") loseLink();
+			expect(await started).toMatchObject({ success: false });
+		} finally {
+			reply.resolve({ status: "checked", proofs: [proof] });
+		}
+		await engine.backend.settle();
+		expect(peer.starts()).toEqual([]);
+		expect(peer.stops()).toEqual([]);
+		expect(readArmedStreamMarker()).toBeUndefined();
+		expect(await Bun.file(getConfigFilePath()).text()).toBe(saved);
+	},
+);
+
 async function awaitLaunchBoundary(finishing: Promise<unknown>) {
 	expect(
 		await Promise.race([
@@ -2540,7 +2939,7 @@ test.each([
 		try {
 			if (stage === "preparing a scoped engine Start") {
 				engine.dispose();
-				engine = evidenceHarness(false, { schemaVersion: "0.25.0" });
+				engine = supportedEngine();
 			}
 			await listPhysicalMics(["micOld", ORIGINAL_MIC]);
 			keepMarker();
@@ -2576,11 +2975,11 @@ test.each([
 				wrapClient(() => ({
 					getCapabilities: async () => ({
 						...CAPS,
-						features: [ATTEMPT_SCOPED_START_FEATURE],
+						features: [ATTEMPT_SCOPED_START_FEATURE, "mic-route-check"],
 					}),
 					prepareStart: async () => {
 						await hold();
-						return { attempt_id: "rekey-attempt", expires_in_ms: 10_000 };
+						return { attempt_id: rekeyAttempt, expires_in_ms: 10_000 };
 					},
 					cancelStart: async (attempt: unknown) => attempt,
 				}));
@@ -2630,7 +3029,7 @@ test.each([
 			if (stage === "preparing a scoped engine Start")
 				expect(engine.startRequests.at(-1)).toHaveProperty(
 					"attempt_id",
-					"rekey-attempt",
+					rekeyAttempt,
 				);
 			expect(await disk()).toEqual(saved);
 		} finally {
@@ -2996,6 +3395,7 @@ test("legacy address-only markers do not gain an identity from the current occup
 		await running("micOld", "single");
 		const marker = JSON.parse(armed ?? "");
 		delete marker.config.audio_physical_ids;
+		delete marker.config.mic_route_proofs;
 		armed = JSON.stringify(marker);
 		await loseEngine();
 		pinLaunchedAudio(undefined);
@@ -3039,7 +3439,7 @@ test("restoration follows the physical microphone Auto actually launched without
 	}
 });
 
-test("a re-enumerated mix input whose new id is already in the mix is not sent twice", async () => {
+test("a re-enumerated mix input whose successor duplicates an accepted route refuses both instead of collapsing the mix", async () => {
 	await running("Primary", "mix");
 	getConfig().audio_inputs = [entry("Second", [1]), entry("Third", [2])];
 	getConfig().asrc = "Third";
@@ -3058,13 +3458,11 @@ test("a re-enumerated mix input whose new id is already in the mix is not sent t
 	} finally {
 		gate.resolve();
 	}
-	expect(await starting).toMatchObject({ success: true });
-	expect(launchedAudio().slice(launches)).toEqual([
-		mixed(wire("Third", [2]), {
-			...wire("Second", [1]),
-			input_id: "hw:CARD=Second",
-		}),
-	]);
+	expect(await starting).toMatchObject({
+		success: false,
+		failure: { class: "audio_source_unavailable" },
+	});
+	expect(launchedAudio().slice(launches)).toEqual([]);
 	expect(acceptStartAudio().config.audio_inputs?.map(({ id }) => id)).toEqual([
 		"Second",
 		"Third",
