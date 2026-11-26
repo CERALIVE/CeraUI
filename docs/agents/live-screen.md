@@ -482,7 +482,8 @@ must keep that ABI.
   saved relative order. An unavailable source or a pick that exceeds the
   saved slot limit restores the previous selection and shows the refusal,
   without retrying. Other mix refusals still retry with `asrc` alone. A pick
-  already in the mix changes only `asrc`.
+  already in the mix changes only `asrc`. Start waits for a pending picker save
+  before assembling its request. If the save is refused, that Start is cancelled.
 - The rule itself is `audioMixWithPrimary` in `@ceraui/rpc/schemas`, shared by
   the backend and the strips.
 - Meters: before going live, the main strip carries today's meter (the

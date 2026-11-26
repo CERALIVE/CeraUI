@@ -37,7 +37,7 @@ import {
 	reconcileSwitchingInput,
 	resolveAppliedBitrate,
 } from '$lib/rpc/live-apply-reconcile';
-import { getStreamActivity } from '$lib/rpc/session-epoch.svelte';
+import { getLinkEpoch, getStreamActivity } from '$lib/rpc/session-epoch.svelte';
 import { statusFieldIsCurrent } from '$lib/rpc/status-field-order';
 import {
 	getStopRetryBusy,
@@ -694,6 +694,9 @@ let encoderConfig = $state<EncoderConfig>({
 // Audio dialog: working override layered over the saved config until the next
 // stream (re)start folds it into the full config sent to rpc.streaming.start.
 let audioOverride = $state<AudioConfigValues | null>(null);
+type SettledAudioPick = { readonly accepted: boolean; readonly override: AudioConfigValues | null };
+let pendingAudioPick: { readonly draft: AudioConfigValues; readonly result: Promise<SettledAudioPick> } | undefined;
+let startWaitingForAudioPick = $state(false);
 
 // Drives the AudioDialog gate: the drafted encoder source wins, the saved
 // config pipeline is the fallback (mirrors EncoderDialog's own seeding).
@@ -719,7 +722,7 @@ function readStartInputs() {
 		audioIds: statusFieldIsCurrent('asrcs') ? status?.asrcs : undefined,
 		updateRefused: updateRefusal?.source === 'live',
 		lifecycle: connected ? getStatus(true)?.stream_lifecycle : undefined,
-		optimism: streamingOptimismState,
+		optimism: startWaitingForAudioPick ? 'starting' : streamingOptimismState,
 		streaming: isStreaming,
 		outcomeUnknown: streamOutcomeUnknown,
 	};
@@ -864,42 +867,54 @@ function handleAudioSave(values: AudioConfigValues) {
 }
 
 // Inline pre-start audio-source pick from the Source section. Folds into the
-// working audio override (keeping codec/delay) so the Live summary + start
-// config reflect it immediately, then persists via setConfig (no stream restart)
-// — mirrors AudioDialog's asrc path. Live audio switching stays gated (Task 10):
-// the Source section only offers this control while idle.
-async function handleSelectAudioSource(selection: string) {
+// working audio override (keeping codec/delay) for immediate feedback. Start
+// uses it only after the picker save settles. This control is idle-only.
+function handleSelectAudioSource(selection: string) {
 	// The picker value may be a stable_id (Todo 22); map it back to the wire asrc
 	// id before persisting — the engine ALSA path is keyed on the asrc id, and the
 	// field-lock/echo must key on the same wire value the `config` broadcast echoes.
 	const asrc = audioSelectionWireId(selection, audioEntries);
 	const previous = audioOverride;
+	const earlier = pendingAudioPick;
 	audioOverride = {
 		asrc,
 		acodec: effectiveAudioCodec ?? 'aac',
 		delay: effectiveAudioDelay,
 	};
 	const picked = audioOverride;
+	// Send picks immediately, but settle rollback in pick order: an earlier
+	// refused draft must not become the next pick's rollback value.
+	const result = Promise.all([earlier?.result, saveAudioPick(asrc)]).then(([prior, accepted]) => {
+		const rollback = prior && earlier?.draft === previous ? prior.override : previous;
+		if (!accepted && audioOverride === picked) audioOverride = rollback;
+		if (pendingAudioPick?.draft === picked) pendingAudioPick = undefined;
+		return { accepted, override: accepted ? picked : rollback };
+	});
+	pendingAudioPick = { draft: picked, result };
+}
+
+async function saveAudioPick(asrc: string): Promise<boolean> {
 	markPending('asrc', asrc);
 	try {
 		// The backend adds the pick to the saved mix against its own current state.
 		const result = await rpc.streaming.setConfig({ asrc, audio_pick: true });
-		if (!result.success) {
-			if (result.error === 'audio_source_unavailable' || result.error === 'audio_inputs_too_many') {
-				if (audioOverride === picked) audioOverride = previous;
-				toast.error(result.error === 'audio_inputs_too_many'
-					? m['live.audioMixer.error.audio_inputs_too_many']()
-					: m['live.startFailure.class.audio_source_unavailable']());
-			} else {
-				// A mix refusal is separate from admission of the selected input.
-				await rpc.streaming.setConfig({ asrc });
-			}
+		if (result.success) return true;
+		if (result.error === 'audio_source_unavailable' || result.error === 'audio_inputs_too_many') {
+			toast.error(result.error === 'audio_inputs_too_many'
+				? m['live.audioMixer.error.audio_inputs_too_many']()
+				: m['live.startFailure.class.audio_source_unavailable']());
+			return false;
 		}
+		// A mix refusal is separate from admission of the selected input.
+		if ((await rpc.streaming.setConfig({ asrc })).success) return true;
 	} catch {
 		toast.error(m["notifications.saveFailed"]());
+		return false;
 	} finally {
 		onRpcResolved('asrc');
 	}
+	toast.error(m["notifications.saveFailed"]());
+	return false;
 }
 
 // A source switch can retire (or restore) the device audio pick in its own
@@ -1162,13 +1177,25 @@ function rememberRefusedStart(id: string) {
 	if (sentStart) refusedStart = { id, intent: sentStart };
 }
 
-function handleStart() {
+async function handleStart() {
 	if (showLiveCockpit || startAssessment.decision.state !== 'ready') return;
+	const pick = pendingAudioPick;
+	if (pick) {
+		const link = getLinkEpoch();
+		const attempt = getStreamingAttemptGeneration();
+		// Wait locally: there is no device Start attempt to reconcile yet.
+		startWaitingForAudioPick = true;
+		const { accepted } = await pick.result;
+		startWaitingForAudioPick = false;
+		if (!accepted || pendingAudioPick || !viewMounted || getLinkEpoch() !== link ||
+			getStreamingAttemptGeneration() !== attempt || showLiveCockpit ||
+			startAssessment.decision.state !== 'ready') return;
+	}
 	toast.dismiss();
 	void dispatchStart(() => {
 		// This attempt owns the local Starting state, not a device Starting receipt.
 		const current = assessStart({ ...readStartInputs(), optimism: 'idle' }).decision;
-		return viewMounted && current.state === 'ready' ? current.config : undefined;
+		return !pendingAudioPick && viewMounted && current.state === 'ready' ? current.config : undefined;
 	}, { beforeSend: rememberStartIntent, onRefused: rememberRefusedStart });
 }
 

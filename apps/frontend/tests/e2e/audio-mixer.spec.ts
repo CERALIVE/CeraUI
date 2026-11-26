@@ -451,6 +451,50 @@ test.describe("audio mixer — caps-full", () => {
 		});
 	});
 
+	for (const [refusal, message] of [
+		["audio_inputs_too_many", "The mix is full. Turn another input off first."],
+		["audio_source_unavailable", "The selected audio input is not available."],
+	] as const) {
+		test(`Start waits for the pick and cancels on ${refusal}`, async ({ page, backendRpc }) => {
+			const saved = [savedTwo[0], { ...savedTwo[1], tracks: [1] }];
+			expect(await backendRpc.call(["streaming", "setConfig"], { audio_inputs: saved })).toMatchObject({
+				success: true,
+			});
+			const attach = (attached: boolean) =>
+				backendRpc.call(["streaming", "setMockDeviceAttached"], { input_id: "audio_elgato_wave3", attached });
+			await attach(false);
+			const second = stripOf(page, SECOND);
+			await expect(second.getByRole("button", { name: `Remove ${SECOND}` })).toBeVisible();
+
+			// Capacity admission itself is covered by the backend suite with a full roster.
+			wire.refuseAudioInputs(refusal);
+			const pick = wire.holdAudioPick(THIRD);
+			await pickThird(page);
+			const held = await pick.held;
+			await startButton(page).click();
+			expect(await wire.pageHasReply(held.id)).toBe(false);
+			wire.refuseAudioInputs(null);
+			pick.release();
+
+			await expect(page.getByText(message, { exact: true })).toBeVisible();
+			expect(wire.calls("streaming.start").map(({ input }) => input.asrc)).toEqual([]);
+			await expect(startButton(page)).toBeEnabled();
+			await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+			expect(wire.calls("streaming.setConfig").map(({ input }) => input)).toEqual([{ asrc: THIRD, audio_pick: true }]);
+			expect(await savedConfig(backendRpc)).toMatchObject({ asrc: MAIN, audio_inputs: saved });
+
+			await attach(true);
+			await expect(second.getByRole("switch")).toBeChecked();
+			const mute = wire.nextAnswer("streaming.setAudioMix");
+			await page.getByTestId(`audio-strip-mute-${MAIN}`).click();
+			expect((await mute).result).toMatchObject({ success: true, applied: { id: MAIN, mute: true } });
+			expect(await savedConfig(backendRpc)).toMatchObject({
+				asrc: MAIN,
+				audio_inputs: [{ ...saved[0], mute: true }, saved[1]],
+			});
+		});
+	}
+
 	async function pickDevice(page: Page, name: RegExp): Promise<void> {
 		await page.getByTestId("audio-source-select").click();
 		await page.getByRole("option", { name }).click();
@@ -871,7 +915,7 @@ test.describe("audio mixer — caps-full", () => {
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
 
-	test("Start pressed while the answer to a No audio pick is held sends no audio, and the released answer settles the pick", async ({
+	test("Start pressed during a No audio pick waits for its answer, then sends no audio", async ({
 		page,
 		backendRpc,
 		workerBackend,
@@ -882,17 +926,19 @@ test.describe("audio mixer — caps-full", () => {
 		const save = wire.holdAudioPick("No audio");
 		await chooseAudio(page, "No audio");
 		const held = await save.held;
+		const start = wire.nextAnswer("streaming.start");
 		try {
 			expect(held.input).toEqual({ asrc: "No audio", audio_pick: true });
 			expect(held.result).toMatchObject({ success: true, applied: { asrc: "No audio" } });
-			await pressStart(page);
-			expect((await workerBackend.mockEngine()).lastStartParams?.audio).toEqual({ mode: "none" });
-			// Start was answered while the page's own socket still had no answer to the pick.
+			await startButton(page).click();
 			expect(await wire.pageHasReply(held.id)).toBe(false);
+			expect(wire.calls("streaming.start")).toEqual([]);
 		} finally {
 			save.release();
 		}
 		expect((await receiveReply(held.id)).result).toEqual(held.result);
+		expect(await start).toMatchObject({ input: { asrc: "No audio" }, result: { success: true } });
+		expect((await workerBackend.mockEngine()).lastStartParams?.audio).toEqual({ mode: "none" });
 		const cockpit = page.getByTestId("live-cockpit");
 		await expect(cockpit).toBeVisible({ timeout: 15_000 });
 		await expect(cockpit.locator('[data-live-value="audio"]')).toHaveText("No audio");

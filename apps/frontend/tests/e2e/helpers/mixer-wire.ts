@@ -35,7 +35,7 @@ export interface MixerWire {
 	delayServer(ms: number): void;
 	/** Hold the device's answer to the next `streaming.setAudioMix`; the call itself reaches the device. */
 	holdAudioMix(): HeldReply;
-	/** Hold the device's answer to the next save of this audio pick; the save itself reaches the device. */
+	/** Hold the answer to the next save of this audio pick, including an injected refusal. */
 	holdAudioPick(asrc: string): HeldReply;
 	/** The device's answer to the next call to this path, which the page receives as usual. */
 	nextAnswer(path: string): Promise<RpcCall>;
@@ -96,6 +96,7 @@ export async function installMixerWire(
 					const call: RpcCall = { id: frame.id, path: frame.path.join("."), input: frame.input ?? {} };
 					all.push(call);
 					byId.set(frame.id, call);
+					const next = nextHolds.findIndex((hold) => hold.matches(call));
 					const mixSave =
 						call.path === "streaming.setConfig" &&
 						("audio_inputs" in call.input || call.input.audio_pick === true);
@@ -103,7 +104,12 @@ export async function installMixerWire(
 						call.result = mixSave
 							? { success: false, error: refusal, applied: {} }
 							: { success: false, error: refusal };
-						ws.send(JSON.stringify({ id: frame.id, result: call.result }));
+						const send = () => ws.send(JSON.stringify({ id: frame.id, result: call.result }));
+						if (next === -1) send();
+						else {
+							const [hold] = nextHolds.splice(next, 1);
+							deliverAnswer(hold, call, send);
+						}
 						return;
 					}
 					if (call.path === "streaming.setAudioMix" && engineRefusal !== null) {
@@ -117,7 +123,6 @@ export async function installMixerWire(
 						ws.send(JSON.stringify({ id: frame.id, result: call.result }));
 						return;
 					}
-					const next = nextHolds.findIndex((hold) => hold.matches(call));
 					const [hold] = next === -1 ? [] : nextHolds.splice(next, 1);
 					if (hold) holdsById.set(frame.id, hold);
 				}
@@ -145,9 +150,7 @@ export async function installMixerWire(
 			}
 			if (answered) {
 				const { call, hold } = answered;
-				hold.deliver = () => ws.send(message);
-				if (hold.released) hold.deliver();
-				hold.settle(call);
+				deliverAnswer(hold, call, () => ws.send(message));
 				return;
 			}
 			if (delayMs === 0 && held === 0) {
@@ -241,4 +244,10 @@ export async function installMixerWire(
 		pageHasReply: (id) => page.evaluate((replyId) => (globalThis as WithPageReplies).__mixerWireReplies.has(replyId), id),
 		pageReply: (id) => page.evaluate((replyId) => (globalThis as WithPageReplies).__mixerWireReplies.next(replyId), id),
 	};
+}
+
+function deliverAnswer(hold: Hold, call: RpcCall, send: () => void) {
+	hold.deliver = send;
+	if (hold.released) send();
+	hold.settle(call);
 }
