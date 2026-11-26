@@ -566,7 +566,7 @@ async function copyPassword() {
 					<p class="text-muted-foreground truncate text-xs">{iface.ifname}</p>
 				{/if}
 			</div>
-			{#if modeView}
+			{#if modeView?.modeKnown}
 				<WifiModeBadge device={deviceId} mode={modeView.displayMode} />
 			{/if}
 			<span

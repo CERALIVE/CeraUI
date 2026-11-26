@@ -499,7 +499,7 @@ test("exclusive Stop retires matching parent aliases independently of an idle vi
 	row.concurrentHotspot = { ifname: "clap-wlan0", activeConn: null };
 	expect(await wifiHotspotStop({ device: 0 })).toEqual({ success: true });
 	expect(row.conn).toBeNull();
-	expect(row.activeConn).toBeUndefined();
+	expect(row.activeConn).toBeNull();
 	expect(row.activeMode).toBeUndefined();
 	expect(row.concurrentHotspot).toBeUndefined();
 });

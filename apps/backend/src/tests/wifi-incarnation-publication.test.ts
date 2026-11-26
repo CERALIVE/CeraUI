@@ -160,6 +160,7 @@ for (const sameMac of [false, true]) {
 											wifi: {
 												[id]: {
 													...row,
+													observed_mode: row.mode,
 													...("hotspot" in row
 														? {
 																hotspot: {
@@ -195,6 +196,7 @@ for (const sameMac of [false, true]) {
 										available: [],
 										supports_hotspot: true,
 										mode: "station",
+										observed_mode: "station",
 										degraded_reason: "permanent-mac-unresolved",
 									},
 								};
