@@ -102,8 +102,9 @@ export function buildRedactor(
 			id,
 			id.replace(/^(.{8})(.{4})(.{4})(.{4})/, "$1-$2-$3-$4-"),
 		]);
+	// A lookahead visits each start so overlapping IDs reach the span merger.
 	const exactBoot = bootForms.length
-		? new RegExp(bootForms.join("|"), "gi")
+		? new RegExp(`(?=(${bootForms.join("|")}))`, "gi")
 		: null;
 	return {
 		unredacted: [...unredacted].sort(),
@@ -187,10 +188,13 @@ export function buildRedactor(
 				) => string,
 				addressContext = false,
 				ignore?: TextSpan,
+				spanGroup = 0,
 			) => {
 				let addressIndex = 0;
 				for (const match of value.matchAll(pattern)) {
-					const end = match.index + match[0].length;
+					const text = match[spanGroup];
+					if (!text) continue;
+					const end = match.index + text.length;
 					if (ignore && ignore[0] <= match.index && end <= ignore[1]) continue;
 					let containing: (typeof addresses)[number] | undefined;
 					if (addressContext) {
@@ -200,8 +204,8 @@ export function buildRedactor(
 						if (address && address.start <= match.index && end <= address.end)
 							containing = address;
 					}
-					const next = replacement(match[0], containing);
-					if (next !== match[0])
+					const next = replacement(text, containing);
+					if (next !== text)
 						spans.push({
 							start: match.index,
 							end,
@@ -210,7 +214,7 @@ export function buildRedactor(
 						});
 				}
 			};
-			if (exactBoot) mask(exactBoot, () => "[BOOT_ID]", false, exempt?.boot);
+			if (exactBoot) mask(exactBoot, () => "[BOOT_ID]", false, exempt?.boot, 1);
 			const numericSpan = exempt?.numeric ?? exempt?.boot;
 			mask(/(?<!\d)89\d{17,18}(?!\d)/g, () => "[ICCID]", false, numericSpan);
 			mask(/(?<!\d)\d{15}(?!\d)/g, () => "[ID]", false, numericSpan);

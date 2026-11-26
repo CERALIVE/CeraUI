@@ -141,6 +141,12 @@ async function download() {
 test("bundle masks covered boot IDs in journal messages but preserves boot metadata", async () => {
 	const dashedPrevious = "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB";
 	const unrelated = "cccccccccccccccccccccccccccccccc";
+	const overlappingBoot = `a${"e".repeat(31)}`;
+	source.bootRecords.push({
+		bootId: overlappingBoot,
+		startedAt: 0,
+		versions: { ...context, bootId: overlappingBoot },
+	});
 	const cursor = `s=${"d".repeat(32)};i=1;b=${bootId};m=2;t=3;x=4`;
 	const scan = spyOn(pages, "scanPage").mockImplementation(
 		async (_query, scope) =>
@@ -150,7 +156,7 @@ test("bundle masks covered boot IDs in journal messages but preserves boot metad
 							{
 								...record(1),
 								cursor,
-								message: `current=${bootId} previous=${dashedPrevious} embedded=f${bootId}e dashed=f${dashedPrevious}e unrelated=${unrelated}`,
+								message: `current=${bootId} previous=${dashedPrevious} embedded=f${bootId}e dashed=f${dashedPrevious}e overlap=${bootId}${overlappingBoot.slice(1)} unrelated=${unrelated}`,
 							},
 						]
 					: [],
@@ -162,7 +168,7 @@ test("bundle masks covered boot IDs in journal messages but preserves boot metad
 			entry: {
 				bootId,
 				cursor,
-				message: `current=[BOOT_ID] previous=[BOOT_ID] embedded=f[BOOT_ID]e dashed=f[BOOT_ID]e unrelated=${unrelated}`,
+				message: `current=[BOOT_ID] previous=[BOOT_ID] embedded=f[BOOT_ID]e dashed=f[BOOT_ID]e overlap=[BOOT_ID] unrelated=${unrelated}`,
 			},
 		});
 	} finally {
