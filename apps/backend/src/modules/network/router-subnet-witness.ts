@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { readSystemBootId } from "../streaming/armed-stream-marker.ts";
-import { type NetdevWitness, readNetdevWitness } from "./netdev-lifetime.ts";
+import type { NetdevWitness } from "./netdev-lifetime.ts";
 
 export const journaledRouterSubnetWitness = z.object({
 	bootId: z.uuid(),
@@ -12,18 +12,6 @@ export const journaledRouterSubnetWitness = z.object({
 });
 
 export type RouterSubnetWitness = z.infer<typeof journaledRouterSubnetWitness>;
-
-export function captureRouterSubnetWitness(
-	ifname: string,
-): RouterSubnetWitness | undefined {
-	const live = readNetdevWitness(ifname);
-	const parsed = journaledRouterSubnetWitness.safeParse({
-		bootId: readSystemBootId(),
-		ifindex: live.ifindex,
-		node: live.node,
-	});
-	return live.present === true && parsed.success ? parsed.data : undefined;
-}
 
 export function sameBootRouterSubnetWitness(
 	preState: Readonly<Record<string, unknown>>,

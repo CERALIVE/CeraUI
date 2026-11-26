@@ -55,6 +55,10 @@ export type CapturedState = Readonly<Record<string, unknown>>;
 export type RollbackResult = "restored" | "failed" | "unavailable" | "absent";
 
 export interface MutationRollbackHandler {
+	/** A kind-specific durable witness can supersede generic USB capture. */
+	rollbackIfAuthoritative?(
+		preState: CapturedState,
+	): Promise<"restored" | "failed"> | undefined;
 	rollback(
 		stableKey: string,
 		preState: CapturedState,
@@ -159,6 +163,15 @@ export async function rollbackMutation(
 	preState: CapturedState,
 ): Promise<RollbackResult> {
 	const revision = mutationJournalRevision();
+	const authoritativeRollback = handlers.get(kind)?.rollbackIfAuthoritative;
+	if (authoritativeRollback) {
+		try {
+			const authoritative = authoritativeRollback(preState);
+			if (authoritative !== undefined) return await authoritative;
+		} catch {
+			return "failed";
+		}
+	}
 	const current = await captureModemState(stableKey);
 	assertMutationJournalRevision(revision);
 	if (current === undefined) return "absent";

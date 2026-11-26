@@ -15,13 +15,27 @@
  * "the write never landed", which is the distinction the whole restore path
  * exists to make.
  */
-import { describe, expect, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	jest,
+	spyOn,
+	test,
+} from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { hilinkDhcpSettingsBody } from "../modules/network/hilink-documents.ts";
 import {
+	netdevPresence,
+	noteNetdevWitness,
+	resetNetdevLifetimesForTest,
+} from "../modules/network/netdev-lifetime.ts";
+import {
 	executeSubnetRewrite,
+	type LiveSubnetRewritePlan,
 	parseHostSubnets,
 	prepareSubnetRewrite,
 	restoreSubnet,
@@ -42,6 +56,15 @@ import {
 
 const HILINK = "12d1:14dc";
 const IFNAME = "enx0c5b8f279a64";
+
+beforeEach(() => {
+	noteNetdevWitness(IFNAME, { ifindex: 7 });
+	spyOn(netdevPresence, "ifindex").mockReturnValue(7);
+});
+afterEach(() => {
+	jest.restoreAllMocks();
+	resetNetdevLifetimesForTest();
+});
 
 const FACTORY: HilinkDhcpRecord = {
 	address: "192.168.8.1",
@@ -153,7 +176,7 @@ function bench(options: {
 async function planFor(
 	unit: ReturnType<typeof bench>,
 	target = "192.168.9.1",
-): Promise<SubnetRewritePlan> {
+): Promise<LiveSubnetRewritePlan> {
 	const prepared = await prepareSubnetRewrite(
 		IFNAME,
 		HILINK,
@@ -413,7 +436,7 @@ describe("the rewrite, and the AUTO-RESTORE when it does not answer", () => {
 	test("a record that moved between preflight and the lease is refused, unwritten", async () => {
 		const unit = bench({});
 		const plan = await planFor(unit);
-		const drifted: SubnetRewritePlan = {
+		const drifted: LiveSubnetRewritePlan = {
 			...plan,
 			current: { ...plan.current, startAddress: "192.168.8.150" },
 		};
@@ -458,7 +481,8 @@ describe("the rewrite, and the AUTO-RESTORE when it does not answer", () => {
 describe("startup replay recovers through the SAME code the live path runs", () => {
 	test("the journaled pre-state round-trips back into a plan", async () => {
 		const unit = bench({});
-		const plan = await planFor(unit);
+		const { ifname, adminUrl, current, target } = await planFor(unit);
+		const plan: SubnetRewritePlan = { ifname, adminUrl, current, target };
 
 		expect(planFromPreState(preStateFor(plan))).toEqual(plan);
 	});

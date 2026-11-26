@@ -215,6 +215,15 @@ source of "is this device blocked" is how a fail-closed guard drifts open.
 complete readable authority and block publication that met no damaged slot;
 unknown/damaged journal authority keeps it raised behind the cancellable retry owner. Failed rollback's
 readable per-identity block is separate from an unreadable global inventory.
+The `router-subnet` kind consults the journal's boot and kernel witness before
+generic USB capture. Same-boot rollback keeps one proof across reads, writes,
+renewal and the final receipt. Same-boot absence, loss of proof or missing or
+invalid boot provenance marks the entry `failed` instead of dispatching an
+unproven rollback. Only a confirmed different boot uses the prior path. The live
+rewrite also retains a durable `failed` row if continuity is lost after possible
+dispatch. Both cases use the operator recovery paths below; the record persists
+across reboot and blocks global Start until resolved. A build that writes these
+rows must include the modem recovery card, which offers those operator actions.
 A lost replay fence or another thrown entry failure counts as incomplete in the
 existing `unreadable` summary, never as an entry verdict. Even if final block
 publication succeeds, startup schedules REPLAY and each invalidated retry retains

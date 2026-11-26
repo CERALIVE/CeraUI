@@ -108,3 +108,33 @@ export function hilinkHeaders(session: HilinkSession): readonly string[] {
 		`__RequestVerificationToken: ${session.token}`,
 	];
 }
+
+export class RouterNetdevLost extends Error {}
+
+export function requireRouterNetdev(isCurrent: () => boolean): void {
+	if (!isCurrent()) throw new RouterNetdevLost("router netdev continuity lost");
+}
+
+/** Use the operation's proof at the name-bound transport, not a new witness. */
+export function routerWriteTransport<T extends HilinkTransport>(
+	deps: T,
+	isCurrent: () => boolean,
+	onDispatch?: () => void,
+): T {
+	return {
+		...deps,
+		fetchViaInterface: async (...args) => {
+			requireRouterNetdev(isCurrent);
+			try {
+				return await deps.fetchViaInterface(...args);
+			} finally {
+				requireRouterNetdev(isCurrent);
+			}
+		},
+		postViaInterface: (...args) => {
+			requireRouterNetdev(isCurrent);
+			onDispatch?.();
+			return deps.postViaInterface(...args);
+		},
+	};
+}

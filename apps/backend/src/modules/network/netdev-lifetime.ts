@@ -124,7 +124,7 @@ export function hasNetdevWitness(witness: NetdevWitness | undefined): boolean {
 	return witness?.ifindex !== undefined || witness?.node !== undefined;
 }
 
-function netdevContinues(
+export function netdevContinues(
 	before: NetdevWitness | undefined,
 	after: NetdevWitness,
 ): boolean {
@@ -142,7 +142,7 @@ function netdevContinues(
 export function netdevLifetimeFence(
 	name: string,
 	durable?: NetdevWitness,
-): () => boolean {
+): (() => boolean) & { readonly issued: NetdevWitness } {
 	const epoch = epochs.get(name);
 	const issued = readNetdevWitness(name);
 	// A previous process's retirement epoch is not recoverable.
@@ -154,11 +154,18 @@ export function netdevLifetimeFence(
 				live.node !== undefined &&
 				live.ifindex !== undefined)) &&
 		netdevContinues(before, live);
-	const valid = comparable(durable ?? witnesses.get(name), issued);
-	return () =>
-		valid &&
-		epochs.get(name) === epoch &&
-		comparable(issued, readNetdevWitness(name));
+	const recorded = durable ?? witnesses.get(name);
+	const valid = comparable(recorded, issued);
+	return Object.assign(
+		() => {
+			if (!valid || epochs.get(name) !== epoch) return false;
+			const live = readNetdevWitness(name);
+			// A partial issuing read cannot supply a positive match for a missing
+			// field, but it must not erase a previously known contradiction.
+			return comparable(issued, live) && !netdevChanged(recorded, live);
+		},
+		{ issued },
+	);
 }
 
 export function noteNetdevWitness(name: string, next: NetdevWitness): void {
