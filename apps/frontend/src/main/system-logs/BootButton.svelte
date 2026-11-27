@@ -37,12 +37,15 @@ void canListBoots(
 });
 
 const boot = $derived(bootSelection.boot);
+const historical = $derived(boot !== null && !boot.current);
 </script>
 
 {#if available}
-	<span hidden id="{uid}-name">{m['systemLogs.boots.open']()}</span>
+	{#if !historical}
+		<span hidden id="{uid}-name">{m['systemLogs.boots.open']()}</span>
+	{/if}
 	<Button
-		aria-labelledby="{uid}-name {uid}-label"
+		aria-labelledby={historical ? `${uid}-label` : `${uid}-name ${uid}-label`}
 		class="relative my-0.5 me-1 h-auto min-h-7 max-w-full min-w-0 shrink gap-1.5 whitespace-normal text-start text-pretty"
 		data-testid="boot-button"
 		data-touch-target="hit-area"

@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { type LogQueryInput, deviceStatsSchema, logAroundOutputSchema, logQueryInputSchema } from '@ceraui/rpc/schemas';
 
+import en from '../../../../packages/i18n/messages/en.json' with { type: 'json' };
 import { expect, type PageRpc, test } from './fixtures/index.js';
 
 import { ensureAuthenticated, navigateTo, pressAndExpectRow } from './helpers/index.js';
@@ -314,7 +315,7 @@ test('a phone pick of All boots while System Logs still loads outranks the linke
 	await expect(logs.getByTestId('system-logs-loading')).toBeVisible();
 
 	// All boots is already highlighted; picking it again is still the operator's action.
-	await logs.getByRole('button', { name: /^Choose a boot/ }).click();
+	await logs.getByRole('button', { name: [en['systemLogs.boots.open'], en['systemLogs.boots.all']].join(' '), exact: true }).click();
 	await page.getByTestId('boot-picker').getByTestId('boot-option-all').click();
 	releaseProbe();
 

@@ -147,7 +147,7 @@ describe("BootButton: when it appears", () => {
 });
 
 describe("BootButton: label", () => {
-	it("is named Choose a boot, followed by the boot it shows", async () => {
+	it("is named by the boot field followed by the boot it shows", async () => {
 		render(BootButton);
 		const node = await button();
 
@@ -162,10 +162,15 @@ describe("BootButton: label", () => {
 	it("reads This boot for the running boot", async () => {
 		if (current !== undefined) bootSelection.choose(current);
 		render(BootButton);
+		const node = await button();
 
-		expect((await button()).textContent?.trim()).toBe(
-			en.systemLogs.boots.current,
-		);
+		expect(node.textContent?.trim()).toBe(en.systemLogs.boots.current);
+		expect(
+			screen.getByRole("button", {
+				name: [en.systemLogs.boots.open, en.systemLogs.boots.current].join(" "),
+				exact: true,
+			}),
+		).toBe(node);
 	});
 
 	it("reads the start time of an earlier boot, and follows the selection", async () => {
@@ -175,12 +180,23 @@ describe("BootButton: label", () => {
 		if (clean !== undefined) bootSelection.choose(clean);
 		await tick();
 
-		expect(node.textContent?.trim()).toBe(
-			en.systemLogs.boots.started.replace(
-				"{time}",
-				formatBootTime(clean?.firstTs ?? 0, "en"),
-			),
+		const started = en.systemLogs.boots.started.replace(
+			"{time}",
+			formatBootTime(clean?.firstTs ?? 0, "en"),
 		);
+		expect(node.textContent?.trim()).toBe(started);
+		expect(screen.getByRole("button", { name: started, exact: true })).toBe(
+			node,
+		);
+
+		bootSelection.reset();
+		await tick();
+		expect(
+			screen.getByRole("button", {
+				name: [en.systemLogs.boots.open, en.systemLogs.boots.all].join(" "),
+				exact: true,
+			}),
+		).toBe(node);
 	});
 
 	it("isolates the start time in a bdi and formats it in the operator's locale", async () => {

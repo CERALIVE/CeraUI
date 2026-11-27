@@ -22,6 +22,8 @@ import type { LogDownloads } from './log-downloads.svelte';
 
 let { downloads }: { downloads: LogDownloads } = $props();
 
+const uid = $props.id();
+
 const logs = $derived([
 	{
 		id: 'device' as const,
@@ -33,7 +35,7 @@ const logs = $derived([
 		id: 'system' as const,
 		icon: Terminal,
 		title: m["advanced.systemLog"](),
-		desc: m["advanced.systemLogTooltip"](),
+		desc: m["advanced.systemLogDownloadHint"](),
 	},
 ]);
 </script>
@@ -47,11 +49,12 @@ const logs = $derived([
 				<Icon class="size-5" />
 			</span>
 			<div class="min-w-0 grow basis-40">
-				<p class="text-sm font-semibold">{log.title}</p>
+				<p class="text-sm font-semibold" id="{uid}-{log.id}-title">{log.title}</p>
 				<p class="text-muted-foreground text-xs"><KeepWords text={log.desc} /></p>
 			</div>
 			<Button
 				aria-describedby={legacyLocked(log.id) ? 'log-download-locked' : undefined}
+				aria-labelledby="{uid}-{log.id}-title {uid}-{log.id}-action"
 				class="ms-auto shrink-0 gap-1.5"
 				data-testid={`log-download-${log.id}`}
 				data-variant="outline"
@@ -62,11 +65,10 @@ const logs = $derived([
 			>
 				{#if isDownloading}
 					<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
-					{m["advanced.downloading"]()}
 				{:else}
 					<Download class="size-4" />
-					{m["advanced.download"]()}
 				{/if}
+				<span id="{uid}-{log.id}-action">{isDownloading ? m["advanced.downloading"]() : m["advanced.download"]()}</span>
 			</Button>
 		</div>
 	{/each}

@@ -486,7 +486,7 @@ describe("RawLogsTab: filters", () => {
 		expect((search as HTMLInputElement).value).toBe("");
 	});
 
-	it("shortens the search placeholder while the filters are folded and keeps the full name", async () => {
+	it("shortens both the search placeholder and accessible name while the filters are folded", async () => {
 		// The Filters button renders only while the bar folds its filters; browsers report its size through ResizeObserver.
 		let report: ((width: number) => void) | undefined;
 		class FoldObserver {
@@ -529,12 +529,15 @@ describe("RawLogsTab: filters", () => {
 			expect(search.getAttribute("placeholder")).toBe(
 				en.systemLogs.raw.searchShort,
 			);
-			expect(search.getAttribute("aria-label")).toBe(
-				en.systemLogs.raw.searchLabel,
-			);
+			expect(
+				screen.getByRole("textbox", { name: en.systemLogs.raw.searchShort }),
+			).toBe(search);
 
 			report?.(0);
 			await tick();
+			expect(
+				screen.getByRole("textbox", { name: en.systemLogs.raw.searchLabel }),
+			).toBe(search);
 			expect(search.getAttribute("placeholder")).toBe(
 				en.systemLogs.raw.searchLabel,
 			);
