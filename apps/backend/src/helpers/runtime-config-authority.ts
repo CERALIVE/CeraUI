@@ -7,6 +7,9 @@ import { runtimeConfigSchema } from "./config-schemas.ts";
 const safetySchema = runtimeConfigSchema.pick({
 	autostart: true,
 	bond_opt_out: true,
+	bond_group_out: true,
+	bond_port_out: true,
+	bond_rollback_out: true,
 	eth_roles: true,
 	wifi_modes: true,
 	network_ingest: true,
@@ -22,9 +25,17 @@ export class RuntimeConfigAuthorityError extends Error {
 	}
 }
 
-/** The authority check alone, for a caller that already holds the parsed JSON. */
-export function parseRuntimeConfigAuthority(raw: unknown): unknown {
+/** Validate authority without replacing the caller's raw JSON or unknown keys. */
+function assertRuntimeConfigAuthority(
+	raw: unknown,
+): asserts raw is Record<string, unknown> {
 	safetySchema.parse(raw);
+}
+
+export function parseRuntimeConfigAuthority(
+	raw: unknown,
+): Record<string, unknown> {
+	assertRuntimeConfigAuthority(raw);
 	return raw;
 }
 

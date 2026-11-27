@@ -29,6 +29,7 @@ import {
 } from "../helpers/config-schemas.ts";
 import { logger } from "../helpers/logger.ts";
 import {
+	parseRuntimeConfigAuthority,
 	RuntimeConfigAuthorityError,
 	readRuntimeConfigAuthority,
 } from "../helpers/runtime-config-authority.ts";
@@ -37,6 +38,11 @@ import { shouldUseMocks } from "../mocks/mock-service.ts";
 import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
 import { announceConfigSave } from "./config-save-listeners.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
+import {
+	readStoredStateFileSync,
+	STORED_STATE_LIMITS,
+} from "./system/update-orchestrator/stored-state-file.ts";
+import { parseAuthorityJson } from "./system/update-orchestrator/strict-authority-json.ts";
 
 /**
  * Where the runtime config persists.
@@ -81,6 +87,11 @@ export async function loadConfig() {
 		{ parsed: raw },
 	);
 	config = coerceLegacySource(result.data);
+	if (config.bond_opt_out && config.bond_rollback_out) {
+		const out = { ...config.bond_opt_out };
+		for (const key of Object.keys(config.bond_rollback_out)) delete out[key];
+		config.bond_opt_out = Object.keys(out).length ? out : undefined;
+	}
 	authorityFailure = undefined;
 
 	// Apply mock pairing AFTER file load so it overrides any absent/undefined remote_key in config.json
@@ -112,6 +123,10 @@ export function saveConfig() {
 	announceConfigSave(config);
 	const dataToSave: RuntimeConfig = {
 		...config,
+		// The live guard sees main's map; only the released reader needs extras.
+		bond_opt_out: config.bond_rollback_out
+			? { ...config.bond_opt_out, ...config.bond_rollback_out }
+			: config.bond_opt_out,
 		password_hash: getPasswordHash(),
 		ssh_pass_hash: getSshPasswordHash(),
 	};
@@ -119,6 +134,24 @@ export function saveConfig() {
 	// finishing before return. Atomic (temp+fsync+rename) so a crash mid-write
 	// can't corrupt config.json — add-on state lives here too (E3).
 	writeFileAtomicSync(configFile, JSON.stringify(dataToSave));
+}
+
+export function saveUsbSharedSerialHistory(hashes: string[]): void {
+	if (authorityFailure) throw authorityFailure;
+	// As on main, the next scan must see this history even if saving fails.
+	config.usb_serial_shared = hashes;
+	const stored = readStoredStateFileSync(
+		configFile,
+		STORED_STATE_LIMITS.packages,
+	);
+	const raw = parseRuntimeConfigAuthority(
+		stored === null ? {} : parseAuthorityJson(stored),
+	);
+	// Discovery owns only its history. Never write the loaded preference snapshot.
+	writeFileAtomicSync(
+		configFile,
+		JSON.stringify({ ...raw, usb_serial_shared: hashes }),
+	);
 }
 
 /** False until a strict load has succeeded; the boot owner retries until it does. */

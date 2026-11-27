@@ -74,6 +74,7 @@ import {
 	wifiAdapterModeSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
+import { bondPersistenceFields } from "./bond-persistence-fields.ts";
 import { logger } from "./logger.ts";
 
 export type { DetectionMethod, RelayProtocol };
@@ -409,6 +410,7 @@ export const runtimeConfigSchema = z.object({
 	// link id. Values can only be true: absence means included. A bare ifname is
 	// never accepted as a durable identity because the Huawei twins swap names.
 	bond_opt_out: z.record(z.string().min(1), z.literal(true)).optional(),
+	...bondPersistenceFields,
 	// SHA-256 of vendor:serial pairs observed on distinct USB parents.
 	usb_serial_shared: z
 		.array(z.string().regex(/^[0-9a-f]{64}$/))

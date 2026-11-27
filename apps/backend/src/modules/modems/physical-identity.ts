@@ -132,6 +132,8 @@ export interface PhysicalDeviceRecord {
 	/** Minted here, deterministically. See {@link mintLinkId}. */
 	readonly linkId: string;
 	readonly legacyLinkId?: string;
+	/** The scan rejected a usable serial seen on distinct USB parents (not a placeholder). */
+	readonly sharedSerial?: true;
 	/** The ID_PATH-derived wire key, omitted when the device reports no ID_PATH. */
 	readonly stableKey?: string;
 	readonly ifname: string;
@@ -146,7 +148,7 @@ export interface PhysicalDeviceRecord {
 
 export type PhysicalBondKeys = Pick<
 	PhysicalDeviceRecord,
-	"anchor" | "linkId" | "legacyLinkId"
+	"anchor" | "linkId" | "legacyLinkId" | "sharedSerial" | "vid" | "idPath"
 >;
 
 const LINK_ID_PREFIX = "lnk_";
@@ -221,6 +223,14 @@ function resolveIdentityKey(
 		return { identityKey: `id-path:${stableKey}`, anchor: "id-path" };
 	}
 	return { identityKey: `ifname:${observation.ifname}`, anchor: "ifname" };
+}
+
+/** The `link_id` a device at this port carries on the `id-path` rung. */
+export function portLinkId(idPath: string | undefined): string | undefined {
+	const stableKey = deriveModemStableKey(idPath);
+	return stableKey === undefined
+		? undefined
+		: mintLinkId(`id-path:${stableKey}`);
 }
 
 /**
@@ -360,11 +370,15 @@ export function resolvePhysicalDevice(
 export function describePhysicalBondKeys(
 	observation: BondKeyObservation,
 ): PhysicalBondKeys {
-	return physicalBondKeys(
-		observation,
-		deriveModemStableKey(observation.idPath),
-		usableUsbSerial(observation.serial),
-	);
+	return {
+		...physicalBondKeys(
+			observation,
+			deriveModemStableKey(observation.idPath),
+			usableUsbSerial(observation.serial),
+		),
+		...(observation.vid !== undefined ? { vid: observation.vid } : {}),
+		...(observation.idPath !== undefined ? { idPath: observation.idPath } : {}),
+	};
 }
 
 function physicalBondKeys(
@@ -391,6 +405,9 @@ function physicalBondKeys(
 		anchor,
 		linkId: mintLinkId(identityKey),
 		...(legacyLinkId !== undefined ? { legacyLinkId } : {}),
+		...(observation.legacyLinkId !== undefined
+			? { sharedSerial: true as const }
+			: {}),
 	};
 }
 

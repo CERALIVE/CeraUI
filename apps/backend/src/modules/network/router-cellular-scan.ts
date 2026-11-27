@@ -55,7 +55,7 @@ import {
 
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
-import { getConfig, saveConfig } from "../config.ts";
+import { getConfig, saveUsbSharedSerialHistory } from "../config.ts";
 import {
 	mintLinkId,
 	type PhysicalDeviceRecord,
@@ -184,10 +184,7 @@ async function defaultReadLinkResult(path: string): Promise<LinkRead> {
 export const defaultRouterCellularScanDeps: RouterCellularScanDeps = {
 	sharedSerials: {
 		load: () => getConfig().usb_serial_shared ?? [],
-		save: (hashes) => {
-			getConfig().usb_serial_shared = hashes;
-			saveConfig();
-		},
+		save: saveUsbSharedSerialHistory,
 	},
 	sysfsRoot: "/",
 	udevDataRoot: "/run/udev/data",

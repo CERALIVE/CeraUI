@@ -991,6 +991,82 @@ the existing credential dialog. Coverage:
 owner retention) and `tests/modem-physical-identity.test.ts` (singleton refusal).
 Remove any sysfs serial bind mount before upgrading.
 
+### A twin's bond choice belongs to its port [EXISTS]
+
+An operator ON for a twin whose serial is unreadable used to be reversed
+silently once the serial returned and the scan showed the excluded pair key.
+The choice is now kept beside `bond_opt_out`. Only an operator toggle changes
+bond preferences. Discovery saves shared-serial history from the current disk
+config, not from a potentially stale in-memory preference snapshot.
+
+| Field | Key | Meaning |
+|---|---|---|
+| `bond_opt_out` | exact or pair link id | Main's ordered transition, followed only by missing path bits for acknowledged serial-keyed USB OFFs with a known path |
+| `bond_group_out` | pair link id | A pair default that transition deleted; it still excludes an untouched twin. Under config authority, like `bond_opt_out` |
+| `bond_opt_in` | id-path link id → USB vendor id | `{ pin? }`: the operator's ON for a port-anchored USB modem. Another vendor's ON cannot overwrite it. `pin` marks an exact bit main's transition derived for that port while it held the ON |
+| `bond_port_out` | id-path link id → USB vendor id | `{ exact?, rollback? }`: an explicit OFF follows the same vendor at this port regardless of serial readability. `exact` identifies a vendor-owned legacy bit; `rollback` requests an additional path bit while the serial-keyed OFF is held |
+| `bond_rollback_out` | id-path link id | Marks bits that were actually appended. They are excluded from the current reader and main's transition and guard projection |
+
+The reader answers, first match wins:
+
+1. A session OFF excludes; an `ifname`-anchored row is included.
+2. A matching vendor's explicit port OFF excludes even if a unique serial is
+   now readable. A legacy exact bit also excludes unless a matching ON
+   supersedes it or a recorded port OFF identifies it as another vendor's.
+   A vendor-unknown legacy bit still excludes. Neither discovery nor a later
+   OFF on that port can identify the owner of the existing bit.
+3. A matching vendor's port ON takes precedence over pair exclusions, even
+   when a lone replacement reports `0000`.
+4. Otherwise the pair key excludes when it is in `bond_opt_out`, or in
+   `bond_group_out` with corroboration: a confirmed shared serial, or another
+   port of the same vendor reporting the same placeholder.
+
+A readable unique-serial OFF keeps the legacy serial bit, replaces its
+same-vendor port ON with a vendor-scoped OFF, and appends the path bit if main
+did not already write it. An ON clears only that vendor's choice and any
+unneeded extra bit, not a bit main would retain. The #697 last-uplink rule
+vetoes an OFF that removes the last sender in either view, including the first
+OFF at a cross-vendor aliased path. Simulated devices, including auto-detected
+emulation, use the legacy map for reads and writes. A simulated toggle also
+retires an opposing saved choice for that vendor. A simulated path OFF makes
+the legacy bit unscoped; stale ownership cannot mask it after a real boot.
+If an effective write left a pair default, a later simulated port ON records
+the vendor's choice even if the serial cannot be read at that moment. This
+keeps the ON when the serial returns without clearing the default for an
+untouched sibling. With no retained pair default a legacy ON creates no record.
+
+The WebSocket config frames omit the new persistence fields. Shared-serial
+discovery updates memory before attempting to save only the history to disk.
+If that save fails, the next scan can publish the twin without retrying the
+same write, as on main.
+
+Signed trade-offs:
+
+- A same-brand modem later plugged into that port inherits the port's choice.
+  PID and pair do not block it; a different vendor id does.
+- A path change, such as a re-cabled hub, loses the ON. The twin falls back to
+  its pair default, which can leave a box with no other uplink without a link.
+- Rollback preserves the exact ordered main bytes for the same successful saves,
+  apart from the appended path bits above. v2026.11.4 can exclude more at a
+  reused path because it cannot see vendor provenance. With no path the old
+  reader has no durable fallback. The other signed rollback limits remain:
+  an extra sibling can join, or an ON saved while the serial was unreadable
+  can drop. An old clean save strips the new fields, not the legacy bits.
+- R-c: with pairs G and H excluded, turn B ON while G's shared serial is
+  readable, then replace G with same-vendor H on the same paths. The current
+  release keeps B IN; v2026.11.4 puts B OUT.
+- R-d: after turning lone B OFF and restarting with untouched twin A and a
+  Huawei, disabling Ethernet leaves only the Huawei eligible. #697 refuses
+  the Huawei OFF; main accepts because it counts A.
+- A readable unique-serial OFF beats a port ON and clears that port's record.
+- Modems reporting the same placeholder, including unrelated ones, are treated
+  as possible twins, and their choice sticks to the port.
+- An OFF on a held alias whose twins are not present still drops the pair
+  default, as before (`unseen-legacy` in `tests/bond-last-uplink-veto.test.ts`).
+
+Coverage: `tests/bond-twin-port-record.test.ts`, through the real scan, the
+configure RPC and the sender candidates.
+
 **`stable_key` is NOT `identityKey`, and this todo did not re-key it.** The wire's
 `stable_key` keeps its exact meaning — the ID_PATH-derived key from the ONE shared
 `deriveModemStableKey` rule — because todo 17's consumers correlate on it, the
