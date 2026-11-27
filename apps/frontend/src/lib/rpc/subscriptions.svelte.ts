@@ -1046,10 +1046,12 @@ function handleMessage(
 				const ownsDispatch = noteWifiConfig(config);
 				// Entry-only missing tokens settle by RPC; transient refusals stay
 				// pending while the same owner performs its one bounded retry.
+				const shownToken = wifiState?.[String(config.device)]?.incarnation;
+				// The key carries the dispatched token, so a withheld display token
+				// cannot make this settle another radio's operation.
 				if (
 					ownsDispatch &&
-					config.incarnation ===
-						wifiState?.[String(config.device)]?.incarnation &&
+					(shownToken === undefined || config.incarnation === shownToken) &&
 					config.error !== "binding-required" &&
 					!(
 						config.error === "radio-changed" &&

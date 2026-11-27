@@ -1516,6 +1516,149 @@ describe("hotspot draft ownership through the real dialog", () => {
 });
 
 describe("live editor binding and safe Stop", () => {
+	for (const prior of ["hotspot", "hybrid"] as const) {
+		it(`keeps fresh ${prior} Setup actions read-only until the settled adapter row`, async () => {
+			const settled = { ...row("radio-A", true), mode: prior };
+			const held = { ...settled, leaving: prior };
+			const view = render(HotspotDialog, {
+				open: true,
+				deviceId: "0",
+				iface: held,
+			});
+			const turnOff = () => screen.getByRole("button", { name: "Turn Off" });
+			const save = () => screen.getByRole("button", { name: "Save" });
+			const station = () => screen.getByRole("radio", { name: "Station" });
+			const lock = () => screen.queryByTestId("wifi-mode-locked-0");
+			for (const control of [turnOff, save, station]) {
+				expect(control().hasAttribute("disabled")).toBe(true);
+				await fireEvent.click(control());
+			}
+			expect(input("hotspot-name").readOnly).toBe(true);
+			expect(lock()?.textContent).toContain("Adapter mode change in progress");
+			expect(rpc.wifi.hotspotStop).not.toHaveBeenCalled();
+			expect(configure).not.toHaveBeenCalled();
+			expect(mode).not.toHaveBeenCalled();
+
+			wire.message("wifi", {
+				adapter_mode: { device: "0", incarnation: "radio-A", success: true },
+			});
+			await tick();
+			expect(turnOff().hasAttribute("disabled")).toBe(true);
+			expect(save().hasAttribute("disabled")).toBe(true);
+			expect(station().hasAttribute("disabled")).toBe(true);
+
+			const inactive = { ...row(), leaving: prior };
+			await view.rerender({ open: true, deviceId: "0", iface: inactive });
+			const enable = screen.getByRole("button", { name: "Enable Hotspot" });
+			expect(enable.hasAttribute("disabled")).toBe(true);
+			await fireEvent.click(enable);
+			expect(screen.queryByTestId("hotspot-activation-confirm")).toBeNull();
+			expect(start).not.toHaveBeenCalled();
+
+			await view.rerender({ open: true, deviceId: "0", iface: settled });
+			expect(turnOff().hasAttribute("disabled")).toBe(false);
+			expect(save().hasAttribute("disabled")).toBe(false);
+			expect(station().hasAttribute("disabled")).toBe(false);
+			expect(lock()).toBeNull();
+		});
+	}
+
+	it("keeps an already-open Start form readable without accepting consent while the peer is transitioning", async () => {
+		const view = render(HotspotDialog, {
+			open: true,
+			deviceId: "0",
+			iface: row(),
+		});
+		await gate();
+		await editAndAcknowledge();
+		const confirm = () => screen.getByTestId("hotspot-confirm-activate");
+		expect(confirm().hasAttribute("disabled")).toBe(false);
+		const reads = prepare.mock.calls.length;
+
+		await view.rerender({
+			open: true,
+			deviceId: "0",
+			iface: { ...row(), transition: "deactivating" },
+		});
+		expect(input("hotspot-confirm-name").value).toBe("typed-name");
+		expect(confirm().hasAttribute("disabled")).toBe(true);
+		await fireEvent.click(confirm());
+		expect(prepare).toHaveBeenCalledTimes(reads);
+		expect(start).not.toHaveBeenCalled();
+
+		await view.rerender({ open: true, deviceId: "0", iface: row() });
+		await ready();
+		expect(confirm().hasAttribute("disabled")).toBe(true);
+		await fireEvent.click(screen.getByTestId("hotspot-confirm-ack"));
+		expect(confirm().hasAttribute("disabled")).toBe(false);
+	});
+
+	for (const entry of ["Start", "Hybrid"] as const) {
+		it(`does not dispatch ${entry} from an old credential Save reply after a peer transition`, async () => {
+			const view = render(HotspotDialog, {
+				open: true,
+				deviceId: "0",
+				iface: row(),
+			});
+			if (entry === "Start") await gate();
+			else {
+				await fireEvent.click(screen.getByRole("radio", { name: "Hybrid" }));
+				await ready();
+			}
+			await editAndAcknowledge();
+			const reply =
+				deferred<Awaited<ReturnType<typeof rpc.wifi.hotspotPrepare>>>();
+			prepare.mockReturnValueOnce(reply.promise);
+			await fireEvent.click(screen.getByTestId("hotspot-confirm-activate"));
+			expect(prepare).toHaveBeenCalledTimes(2);
+			await view.rerender({
+				open: true,
+				deviceId: "0",
+				iface: { ...row(), transition: "deactivating" },
+			});
+			await view.rerender({ open: true, deviceId: "0", iface: row() });
+
+			reply.resolve({
+				success: true,
+				name: "typed-name",
+				password: "typed-password",
+			});
+			await waitFor(() =>
+				expect(
+					screen.queryByTestId("hotspot-activation-confirm")?.dataset.phase,
+				).not.toBe("saving"),
+			);
+			expect(entry === "Start" ? start : mode).not.toHaveBeenCalled();
+			expect(
+				screen.getByTestId("hotspot-confirm-activate").hasAttribute("disabled"),
+			).toBe(true);
+		});
+	}
+
+	it("does not resend a pre-lock credential write on the next same-radio status", async () => {
+		const view = render(HotspotDialog, {
+			open: true,
+			deviceId: "0",
+			iface: row(),
+		});
+		await gate();
+		await editAndAcknowledge();
+		prepare.mockResolvedValueOnce(unobserved);
+		await fireEvent.click(screen.getByTestId("hotspot-confirm-activate"));
+		await tick();
+		expect(prepare.mock.calls.filter(([request]) => request.name)).toHaveLength(
+			1,
+		);
+		const held = { ...row(), transition: "deactivating" as const };
+		await view.rerender({ open: true, deviceId: "0", iface: held });
+		wire.message("status", { wifi: { "0": held } });
+		await ready();
+		expect(prepare.mock.calls.filter(([request]) => request.name)).toHaveLength(
+			1,
+		);
+		expect(start).not.toHaveBeenCalled();
+	});
+
 	it("keeps Stop available when a live tokenless AP replaces an open gate", async () => {
 		const view = render(HotspotDialog, {
 			open: true,
@@ -2283,6 +2426,34 @@ it("preserves another client's mode transition when it wins after our handoff", 
 	expect(getOperationPhase(key)).toBe("confirmed");
 });
 
+it("keeps the connected Hotspot Setup mode gate unsupported without a new radio observation", async () => {
+	const reply = deferred<Awaited<ReturnType<typeof rpc.wifi.setAdapterMode>>>();
+	mode.mockReturnValueOnce(reply.promise);
+	wire.message("status", { wifi: { "0": row() } });
+	render(HotspotDialog, { open: true, deviceId: "0", iface: row() });
+	await fireEvent.click(screen.getByRole("radio", { name: "Hybrid" }));
+	await ready();
+	await fireEvent.click(screen.getByTestId("hotspot-confirm-ack"));
+	await fireEvent.click(screen.getByTestId("hotspot-confirm-activate"));
+	await waitFor(() => expect(mode).toHaveBeenCalledTimes(1));
+	expect(getOperationPhase(wifiModeOpKey("0", "radio-A"))).toBe("pending");
+	const prepared = prepare.mock.calls.length;
+	vi.useFakeTimers();
+	try {
+		reply.resolve(unobserved);
+		await vi.advanceTimersByTimeAsync(3000);
+		await tick();
+		expect(screen.getByTestId("hotspot-activation-confirm").dataset.phase).toBe(
+			"unsupported",
+		);
+		expect(screen.getByTestId("hotspot-confirm-unavailable")).toBeTruthy();
+		expect(prepare).toHaveBeenCalledTimes(prepared);
+		expect(mode).toHaveBeenCalledTimes(1);
+	} finally {
+		vi.useRealTimers();
+	}
+});
+
 it("settles this client's mode attempt from its own busy frame before its RPC reply", async () => {
 	const reply = deferred<Awaited<ReturnType<typeof rpc.wifi.setAdapterMode>>>();
 	mode.mockReturnValueOnce(reply.promise);
@@ -2319,6 +2490,227 @@ it("settles this client's mode attempt from its own busy frame before its RPC re
 });
 
 describe("deferred Configure admission feedback", () => {
+	for (const receipt of ["entry reply", "deferred outcome"] as const) {
+		it(`does not replay a stale Save after a peer restarts the AP before the ${receipt}`, async () => {
+			const ack =
+				deferred<Awaited<ReturnType<typeof rpc.wifi.hotspotConfigure>>>();
+			const initial = row("radio-A", true);
+			configure.mockReturnValueOnce(ack.promise);
+			configure.mockResolvedValueOnce({ success: false, error: "DEVICE_BUSY" });
+			const view = render(HotspotDialog, {
+				open: true,
+				deviceId: "0",
+				iface: initial,
+			});
+			const push = async (iface: WifiInterface) => {
+				wire.message("status", { wifi: { "0": iface } });
+				await view.rerender({ open: true, deviceId: "0", iface });
+			};
+			await fireEvent.input(input("hotspot-name"), {
+				target: { value: "stale-draft" },
+			});
+			await fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+			expect(configure).toHaveBeenCalledTimes(1);
+
+			await push({ ...initial, transition: "deactivating" });
+			await push({ ...row(), observed_mode: "station" });
+			const peer: WifiInterface = {
+				...initial,
+				hotspot: {
+					name: "peer-credentials",
+					password: "peer-password",
+					available_channels: {},
+				},
+			};
+			await push({ ...peer, transition: "activating" });
+			await push(peer);
+			if (receipt === "deferred outcome") {
+				wire.message("wifi", {
+					hotspot: {
+						config: { device: 0, incarnation: "radio-A", ...unobserved },
+					},
+				});
+				ack.resolve({ success: true, accepted: true });
+			} else ack.resolve(unobserved);
+			await ack.promise;
+			await tick();
+			await push(peer);
+			await waitFor(() =>
+				expect(getOperationPhase(wifiHotspotConfigOpKey("0", "radio-A"))).toBe(
+					"failed",
+				),
+			);
+			expect(configure).toHaveBeenCalledTimes(1);
+			expect(input("hotspot-name").value).toBe("peer-credentials");
+		});
+	}
+
+	it.each([
+		["entry reply", "stable token"],
+		["deferred outcome", "stable token"],
+		["entry reply", "withheld after refusal"],
+		["deferred outcome", "withheld after refusal"],
+		["entry reply", "reopen during restart"],
+		["deferred outcome", "reopen during restart"],
+		["entry reply", "withheld before refusal"],
+		["deferred outcome", "withheld before refusal"],
+	] as const)(
+		"refreshes refused Save credentials only after the peer settles (%s, %s)",
+		async (receipt, schedule) => {
+			const ack =
+				deferred<Awaited<ReturnType<typeof rpc.wifi.hotspotConfigure>>>();
+			const initial = row("radio-A", true);
+			configure.mockReturnValueOnce(ack.promise);
+			configure.mockResolvedValueOnce({ success: false, error: "DEVICE_BUSY" });
+			const view = render(HotspotDialog, {
+				open: true,
+				deviceId: "0",
+				iface: initial,
+			});
+			const push = async (iface: WifiInterface) => {
+				wire.message("status", { wifi: { "0": iface } });
+				await view.rerender({ open: true, deviceId: "0", iface });
+			};
+			await fireEvent.input(input("hotspot-name"), {
+				target: { value: "stale-draft" },
+			});
+			await fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+			expect(configure).toHaveBeenCalledTimes(1);
+
+			const restarting: WifiInterface = {
+				...initial,
+				transition: "activating",
+			};
+			const withholdToken = async () => {
+				const tokenless = { ...restarting };
+				delete tokenless.incarnation;
+				await push(tokenless);
+				await push(restarting);
+			};
+			await push(restarting);
+			if (schedule === "withheld before refusal") await withholdToken();
+			const peer: WifiInterface = {
+				...initial,
+				hotspot: {
+					name: "peer-credentials",
+					password: "peer-password",
+					available_channels: {},
+				},
+			};
+			if (receipt === "deferred outcome") {
+				wire.message("wifi", {
+					hotspot: {
+						config: { device: 0, incarnation: "radio-A", ...unobserved },
+					},
+				});
+				ack.resolve({ success: true, accepted: true });
+			} else ack.resolve(unobserved);
+			await ack.promise;
+			await tick();
+			await push(restarting);
+			await waitFor(() =>
+				expect(getOperationPhase(wifiHotspotConfigOpKey("0", "radio-A"))).toBe(
+					"failed",
+				),
+			);
+			if (schedule === "withheld after refusal") {
+				await withholdToken();
+				expect(screen.queryByTestId("hotspot-editor-radio-changed")).toBeNull();
+			}
+			if (schedule === "reopen during restart") {
+				await view.rerender({ open: false, deviceId: "0", iface: restarting });
+				await push(restarting);
+			}
+			expect(screen.queryByTestId("hotspot-editor-radio-changed")).toBeNull();
+			expect(configure).toHaveBeenCalledTimes(1);
+			expect(
+				(screen.getByRole("button", { name: /^Save$/ }) as HTMLButtonElement)
+					.disabled,
+			).toBe(true);
+			await push(peer);
+			expect(input("hotspot-name").value).toBe("peer-credentials");
+			expect(input("hotspot-password").value).toBe("peer-password");
+			expect(screen.getByTestId("hotspot-editor-radio-changed")).toBeTruthy();
+			expect(
+				(screen.getByRole("button", { name: /^Save$/ }) as HTMLButtonElement)
+					.disabled,
+			).toBe(false);
+			expect(configure).toHaveBeenCalledTimes(1);
+		},
+	);
+
+	it("previews a replacement radio's own credentials, not the previous radio's, while it settles", async () => {
+		const ack =
+			deferred<Awaited<ReturnType<typeof rpc.wifi.hotspotConfigure>>>();
+		configure.mockReturnValueOnce(ack.promise);
+		const initial = row("radio-A", true);
+		const view = render(HotspotDialog, {
+			open: true,
+			deviceId: "0",
+			iface: initial,
+		});
+		const push = async (iface: WifiInterface) => {
+			wire.message("status", { wifi: { "0": iface } });
+			await view.rerender({ open: true, deviceId: "0", iface });
+		};
+		await fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+		await push({ ...initial, transition: "activating" });
+		ack.resolve(unobserved);
+		await ack.promise;
+		await tick();
+		await push({ ...initial, transition: "activating" });
+		await waitFor(() =>
+			expect(getOperationPhase(wifiHotspotConfigOpKey("0", "radio-A"))).toBe(
+				"failed",
+			),
+		);
+		await push({ ...row("radio-B", true), transition: "activating" });
+		expect(input("hotspot-name").value).toBe("radio-B-stored");
+		expect(
+			(screen.getByRole("button", { name: /^Save$/ }) as HTMLButtonElement)
+				.disabled,
+		).toBe(true);
+		await push(row("radio-B", true));
+		expect(input("hotspot-name").value).toBe("radio-B-stored");
+		expect(configure).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		["success", { success: true }, "confirmed"],
+		["writer failure", { error: "radio-unverified" }, "failed"],
+	] as const)(
+		"ends Saving when its %s terminal arrives while the token is withheld",
+		async (_label, terminal, phase) => {
+			configure.mockResolvedValueOnce({ success: true, accepted: true });
+			const initial = row("radio-A", true);
+			const view = render(HotspotDialog, {
+				open: true,
+				deviceId: "0",
+				iface: initial,
+			});
+			const push = async (iface: WifiInterface) => {
+				wire.message("status", { wifi: { "0": iface } });
+				await view.rerender({ open: true, deviceId: "0", iface });
+			};
+			await fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+			await waitFor(() => expect(configure).toHaveBeenCalledTimes(1));
+			const tokenless = { ...initial };
+			delete tokenless.incarnation;
+			await push(tokenless);
+			wire.message("wifi", {
+				hotspot: { config: { device: 0, incarnation: "radio-A", ...terminal } },
+			});
+			await tick();
+			await push(initial);
+			await waitFor(() =>
+				expect(getOperationPhase(wifiHotspotConfigOpKey("0", "radio-A"))).toBe(
+					phase,
+				),
+			);
+			expect(configure).toHaveBeenCalledTimes(1);
+		},
+	);
+
 	it("shows a post-ack unverified refusal while the displayed token is unchanged", async () => {
 		wire.message("status", { wifi: { "0": row("radio-A", true) } });
 		render(HotspotDialog, {

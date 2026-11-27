@@ -58,10 +58,11 @@ export function broadcastMsg(
 	data: unknown,
 	activeMin = 0,
 	authedOnly = true,
+	relayData = data,
 ): void {
 	broadcastMsgLocal(type, data, activeMin, undefined, authedOnly);
 	if (isRelayable(type)) {
-		relayStatusToGateway(type, data, nextRelaySeq(type));
+		relayStatusToGateway(type, relayData, nextRelaySeq(type));
 	}
 }
 

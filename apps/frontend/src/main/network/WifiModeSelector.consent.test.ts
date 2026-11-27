@@ -388,6 +388,40 @@ describe("what the question leaves alone", () => {
 });
 
 describe("frames that land between the choice and the start", () => {
+	for (const marker of [
+		{ transition: "activating" },
+		{ leaving: null },
+	] as const) {
+		it(`does not replay Hybrid consent after a peer transition reported by ${Object.keys(marker)[0]}`, async () => {
+			const command = await import("$lib/rpc/async-operation.svelte");
+			using run = vi.spyOn(command, "osCommand");
+			const reply = Promise.withResolvers<typeof unobserved>();
+			mode.mockReturnValueOnce(reply.promise);
+			label("station");
+			const view = section([["0", row("station")]]);
+			await open();
+			await choose("hybrid");
+			await answerQuestion();
+			expect(mode).toHaveBeenCalledTimes(1);
+
+			// Direct Start has no adapter_mode event or new radio token.
+			await view.push([["0", { ...row("station"), ...marker }]]);
+			await view.push([["0", row("hotspot")]]);
+			reply.resolve(unobserved);
+			await reply.promise;
+			await view.push([["0", row("hotspot")]]);
+
+			const settlement = run.mock.results[0];
+			if (settlement?.type !== "return")
+				throw new Error("Mode command did not start");
+			await settlement.value;
+			await tick();
+			expect(mode).toHaveBeenCalledTimes(1);
+			expect(getOperationPhase(wifiModeOpKey("0", "radio-A"))).toBe("failed");
+			expect(asked()).toBeNull();
+		});
+	}
+
 	it("asks on the inline confirm when the access point ended after it was armed", async () => {
 		label("hybrid");
 		const view = section([["0", row("hybrid")]]);

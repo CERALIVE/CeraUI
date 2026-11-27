@@ -187,9 +187,10 @@ export function autoconnectFixture() {
 					MAC,
 					row,
 					{ ...deps, readProfilePins: readHotspotProfilePins, ...overrides },
-					undefined,
-					attempt,
-					binding ?? bindingForRow(MAC, row),
+					{
+						restoreAttempt: attempt,
+						binding: binding ?? bindingForRow(MAC, row),
+					},
 				);
 				settlePending(row.ifname, true);
 				return result;

@@ -386,13 +386,9 @@ test("hybrid restore logs one warning with the selector's evidence and retry ord
 	try {
 		const warn = spyOn(logger, "warn").mockImplementation(() => logger);
 		f.target.state("20 (unavailable)");
-		const result = await startHotspotLocked(
-			MAC,
-			f.row,
-			f.activationDeps,
-			undefined,
-			{ attempt: 2, maxAttempts: 3 },
-		);
+		const result = await startHotspotLocked(MAC, f.row, f.activationDeps, {
+			restoreAttempt: { attempt: 2, maxAttempts: 3 },
+		});
 		expect(result).toMatchObject({
 			success: false,
 			reason: "hybrid-channel-not-permitted",
@@ -441,8 +437,7 @@ test("boot discovery refusal warnings report the three actual restore attempts",
 					MAC,
 					f.row,
 					{ ...f.activationDeps, publishOutcome },
-					undefined,
-					attempt,
+					{ restoreAttempt: attempt },
 				),
 		},
 		{
@@ -721,9 +716,8 @@ test.each([
 			}
 			const offset = getRecentLogLines().length;
 			expect(
-				await startHotspotLocked(MAC, f.row, f.activationDeps, undefined, {
-					attempt: 2,
-					maxAttempts: 3,
+				await startHotspotLocked(MAC, f.row, f.activationDeps, {
+					restoreAttempt: { attempt: 2, maxAttempts: 3 },
 				}),
 			).toMatchObject({
 				success: false,

@@ -440,6 +440,8 @@ export const wifiInterfaceSchema = z.object({
 	// Three-way display observation, separate from the physical radio's mode.
 	// null means not verified; omission means the device predates this field.
 	observed_mode: wifiAdapterModeSchema.nullable().optional(),
+	// Local-only mode before an unfinished change; null means it was not verified.
+	leaving: wifiAdapterModeSchema.nullable().optional(),
 	degraded_reason: z
 		.enum(['unavailable', 'operational-mac-missing', 'permanent-mac-unresolved'])
 		.optional(),

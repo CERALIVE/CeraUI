@@ -351,14 +351,18 @@ export function deriveWifiAdapterModeView(
 	const observedMode = observedModeOf(input.entry, input.iface);
 	const wireOptions = input.entry?.options ?? fallbackOptions(input.iface);
 	const pending = input.phase === "pending";
-	const modeKnown = pending || input.iface.observed_mode !== null;
-
-	// A pending transition holds the PRIOR mode, and so does a failed one: the
-	// device kept its previous mode, so showing the requested one would report an
-	// outcome that did not happen.
-	const displayMode = pending
-		? previousMode(input, observedMode)
-		: observedMode;
+	const leaving = input.iface.leaving;
+	const prior = pending ? (input.from ?? leaving) : leaving;
+	const modeKnown =
+		leaving === undefined
+			? pending || input.iface.observed_mode !== null
+			: prior !== null;
+	const displayMode =
+		leaving !== undefined
+			? (prior ?? observedMode)
+			: pending
+				? previousMode(input, observedMode)
+				: observedMode;
 
 	const byMode = new Map(wireOptions.map((o) => [o.mode, o]));
 	const options = WIFI_ADAPTER_MODES.map<WifiAdapterModeOptionView>((mode) => {

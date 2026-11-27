@@ -73,6 +73,7 @@ import {
 	writeHotspotProfileFields,
 } from "./wifi-hotspot-profile-operation.ts";
 import { HOTSPOT_SECURITY, securityFromNM } from "./wifi-hotspot-security.ts";
+import { retireReplacedHotspotTransition } from "./wifi-hotspot-transition.ts";
 import {
 	canHotspot,
 	type ExistingHotspotConn,
@@ -740,12 +741,14 @@ async function observeHotspotConn(
 function clearRejectedHotspotConn(macAddress: string, uuid: string): void {
 	const iface = getWifiInterfaceByMacAddress(macAddress);
 	if (!iface || !canHotspot(iface) || iface.hotspot.conn !== uuid) return;
-	const hotspot = { ...iface.hotspot };
+	const previous = iface.hotspot;
+	const hotspot = { ...previous };
 	delete hotspot.conn;
 	delete hotspot.name;
 	delete hotspot.password;
-	// Replacing the rejected cache also invalidates operations waiting on it.
+	// Replacing the cache invalidates its local claim, not the legacy raw flag.
 	iface.hotspot = hotspot;
+	retireReplacedHotspotTransition(iface, previous);
 }
 
 export function hasCompatibleHotspotProfile(

@@ -313,6 +313,52 @@ describe("the snapshot distinguishes settled station from unreadable mode", () =
 	});
 });
 
+describe("a device-published prior mode", () => {
+	it("keeps a newly opened peer on the prior mode without an offering or pending frame", () => {
+		const beforeTerminal = {
+			...iface({ mode: "hotspot", observed_mode: "hotspot" }),
+			leaving: "station" as const,
+		};
+		expect(view({ iface: beforeTerminal }).displayMode).toBe("station");
+		expect(
+			view({ iface: iface({ mode: "hotspot", observed_mode: "hotspot" }) })
+				.displayMode,
+		).toBe("hotspot");
+	});
+
+	it("keeps Hybrid during the two-leg gap even after a sibling refresh says Station", () => {
+		const betweenLegs = {
+			...iface({ mode: "station", observed_mode: "station" }),
+			leaving: "hybrid" as const,
+		};
+		expect(
+			view({ iface: betweenLegs, entry: entry({ mode: "station" }) })
+				.displayMode,
+		).toBe("hybrid");
+	});
+
+	it("keeps the requester's own prior instead of borrowing the device witness", () => {
+		const row = {
+			...iface({ mode: "hotspot", observed_mode: "hotspot" }),
+			leaving: "station" as const,
+		};
+		expect(
+			view({ iface: row, phase: "pending", from: "hybrid", target: "hotspot" })
+				.displayMode,
+		).toBe("hybrid");
+	});
+
+	it("does not select the new mode during a transition with an unknown prior", () => {
+		const row = {
+			...iface({ mode: "hotspot", observed_mode: "hotspot" }),
+			leaving: null,
+		};
+		const v = view({ iface: row, phase: "pending", target: "hotspot" });
+		expect(v.modeKnown).toBe(false);
+		expect(v.options.filter((option) => option.selected)).toEqual([]);
+	});
+});
+
 describe("a pending transition holds the PRIOR mode", () => {
 	it("does not flip the control before the device confirms", () => {
 		const v = view({

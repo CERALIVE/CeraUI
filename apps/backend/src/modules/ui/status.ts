@@ -77,7 +77,7 @@ import {
 } from "../system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../system/ssh.ts";
 import { getOrchestratorWireState } from "../system/update-orchestrator/runtime.ts";
-import { wifiBuildMsg } from "../wifi/wifi.ts";
+import { wifiBuildLegacyRemoteMsg, wifiBuildMsg } from "../wifi/wifi.ts";
 import { notificationSendPersistent } from "./notifications.ts";
 import { buildMsg } from "./websocket-server.ts";
 
@@ -117,7 +117,7 @@ export type StatusResponseMessage = {
 	unclaimed_adapters?: UnclaimedAdapter[] | undefined;
 };
 
-export function sendStatus(conn: WebSocket) {
+export function sendStatus(conn: WebSocket, buildWifi = wifiBuildMsg) {
 	// Re-probe SSH in the background; broadcasts only if the status changed.
 	void getSshStatus();
 	conn.send(
@@ -132,7 +132,7 @@ export function sendStatus(conn: WebSocket) {
 			update_state: getUpdateState(),
 			update_orchestrator: getOrchestratorWireState(),
 			ssh: getCachedSshStatus(),
-			wifi: wifiBuildMsg(),
+			wifi: buildWifi(),
 			modems: buildModemsWireMessage(),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
@@ -152,14 +152,20 @@ export function sendStatus(conn: WebSocket) {
 	);
 }
 
-export function sendInitialStatus(conn: WebSocket) {
+export function sendInitialStatus(
+	conn: WebSocket,
+	audience: "local" | "legacy-remote" = "local",
+) {
 	const config = getConfig();
 	conn.send(buildMsg("config", config));
 	rememberConfigSent(config);
 	conn.send(buildMsg("pipelines", getPipelinesMessage()));
 	conn.send(buildMsg("sources", getSourcesMessage()));
 	if (getRelays()) conn.send(buildMsg("relays", buildRelaysMsg()));
-	sendStatus(conn);
+	sendStatus(
+		conn,
+		audience === "legacy-remote" ? wifiBuildLegacyRemoteMsg : wifiBuildMsg,
+	);
 	conn.send(buildMsg("netif", netIfBuildMsg()));
 	conn.send(buildMsg("sensors", getSensors()));
 	conn.send(buildMsg(ENCODER_LOAD_EVENT, getEncoderLoad()));

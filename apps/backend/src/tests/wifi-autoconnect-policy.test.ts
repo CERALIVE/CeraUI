@@ -120,9 +120,8 @@ test("restoring an independent port preserves that profile's WPA3 despite a WPA2
 	await f.sample();
 	const binding = bindingForRow(owner, row);
 	if (!binding) throw new Error("Missing verified port binding");
-	await startHotspotLocked(owner, row, f.deps, undefined, undefined, {
-		...binding,
-		bootRestore: "verified",
+	await startHotspotLocked(owner, row, f.deps, {
+		binding: { ...binding, bootRestore: "verified" },
 	});
 	expect(f.activations).toEqual([uuid]);
 	expect(f.profiles.get(uuid)?.["802-11-wireless-security.key-mgmt"]).toBe(

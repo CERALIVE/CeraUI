@@ -87,6 +87,7 @@ import {
 } from "./wifi-device-list.ts";
 import { reconcileHybridStationChannel } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
+import { retireReplacedHotspotTransition } from "./wifi-hotspot-transition.ts";
 import {
 	canHotspot,
 	isApMode,
@@ -551,9 +552,11 @@ async function reconcileSampledWifiRegistry(): Promise<boolean> {
 							password: _password,
 							channel: _channel,
 							security: _security,
+							transition: _transition,
 							...idle
 						} = row.hotspot;
 						row.hotspot = idle;
+						retireReplacedHotspotTransition(row);
 					}
 					removeWifiInterface(key, "transfer");
 					addWifiInterface(identity.key, row);

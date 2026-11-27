@@ -259,18 +259,20 @@ function membershipKey(stations: readonly HotspotClient[]): string {
 		.join(",")}`;
 }
 
-function currentRosters() {
+function currentRosters(prune = true) {
 	const aps = Object.values(getWifiInterfacesByMacAddress()).flatMap(
 		(iface) => {
 			const ifname = hotspotApIfname(iface);
 			return ifname === undefined ? [] : [{ id: iface.id, ifname }];
 		},
 	);
-	const names = new Set(aps.map(({ ifname }) => ifname));
-	for (const ifname of new Set([...cache.keys(), ...inFlight.keys()])) {
-		if (!names.has(ifname)) {
-			cache.delete(ifname);
-			inFlight.delete(ifname);
+	if (prune) {
+		const names = new Set(aps.map(({ ifname }) => ifname));
+		for (const ifname of new Set([...cache.keys(), ...inFlight.keys()])) {
+			if (!names.has(ifname)) {
+				cache.delete(ifname);
+				inFlight.delete(ifname);
+			}
 		}
 	}
 	return aps.map(({ id, ifname }) => ({
@@ -285,17 +287,16 @@ export function currentHotspotApIfnames(): string[] {
 }
 
 /** Project roster blocks without acknowledging delivery to any subscriber. */
-export function hotspotClientsForMessage(): ReadonlyMap<
-	number,
-	HotspotClients
-> {
-	const rosters = currentRosters();
+export function hotspotClientsForMessage(
+	refresh = true,
+): ReadonlyMap<number, HotspotClients> {
+	const rosters = currentRosters(refresh);
 	const clients = new Map<number, HotspotClients>();
 	for (const { id, entry } of rosters) {
 		if (entry === undefined) continue;
 		clients.set(id, entry.clients);
 	}
-	void refreshHotspotClients(rosters.map(({ ifname }) => ifname));
+	if (refresh) void refreshHotspotClients(rosters.map(({ ifname }) => ifname));
 	return clients;
 }
 

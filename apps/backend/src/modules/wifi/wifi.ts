@@ -71,6 +71,7 @@ import {
 	wifiAdapterLockKey,
 	withWifiAdapterLock,
 } from "./wifi-adapter-lock.ts";
+import { displayObservedWifiAdapterMode } from "./wifi-adapter-mode.ts";
 import {
 	getWifiCapabilitiesForInterface,
 	getWifiLinkTelemetryForInterface,
@@ -113,6 +114,7 @@ import {
 	offeredHotspotMaxWidth,
 	offeredHotspotSecurity,
 } from "./wifi-hotspot-security.ts";
+import { projectHotspotTransition } from "./wifi-hotspot-transition.ts";
 import {
 	canHotspot,
 	isApMode,
@@ -128,6 +130,7 @@ import {
 	type WifiInterface,
 	type WifiInterfaceId,
 } from "./wifi-interfaces.ts";
+import { projectWifiModeWitness } from "./wifi-mode-witness.ts";
 import {
 	type ReadRadioInventory,
 	wifiRadioIdentity,
@@ -219,6 +222,7 @@ export type WifiInterfaceResponseMessage = Pick<
 	supports_ap_sta_concurrency?: true;
 	mode?: "station" | "hotspot";
 	observed_mode?: WifiInterfaceWire["observed_mode"];
+	leaving?: WifiInterfaceWire["leaving"];
 	transition?: "activating" | "deactivating";
 	degraded_reason?: BaseWifiInterface["degradedReason"];
 	// Absent means NOT COMPUTED (no `iw`, an unresolvable wiphy, or a dump that
@@ -252,6 +256,30 @@ function applyScanStamp(
 }
 
 export function wifiBuildMsg() {
+	return buildWifiSnapshot(true);
+}
+
+export function wifiBuildLegacyRemoteMsg() {
+	return buildWifiSnapshot(true, { legacyTransitions: true });
+}
+
+type WifiStatusRows = Record<string, WifiInterfaceResponseMessage>;
+
+const hybridStatusEvidence = new WeakMap<
+	WifiInterface,
+	{ readonly incarnation: string | undefined; readonly qualified: boolean }
+>();
+
+function buildWifiSnapshot(
+	refreshTelemetry: boolean,
+	{
+		legacyTransitions,
+		legacyOverrides,
+	}: {
+		readonly legacyTransitions?: boolean;
+		readonly legacyOverrides?: WifiStatusRows;
+	} = {},
+): WifiStatusRows {
 	// Return mock WiFi data in development mode
 	if (shouldUseMocks()) {
 		const config = getScenarioConfig();
@@ -348,8 +376,8 @@ export function wifiBuildMsg() {
 		return ifs;
 	}
 
-	const ifs: Record<string, WifiInterfaceResponseMessage> = {};
-	const hotspotClients = hotspotClientsForMessage();
+	const ifs: WifiStatusRows = {};
+	const hotspotClients = hotspotClientsForMessage(refreshTelemetry);
 	// The interfaces eligible for a link read, collected as the rows are built
 	// so the refresh below is driven by exactly what this build decided is a
 	// connected station — never by a guess made inside the reader.
@@ -367,19 +395,24 @@ export function wifiBuildMsg() {
 			hw: wifiInterface.hw,
 			saved: {},
 		};
-		const incarnation = projectWifiRadioIncarnation(
-			wifiInterface,
-			wifiRadioIdentity.state.rows.get(wifiInterface.ifname),
-		);
+		const identity = wifiRadioIdentity.state.rows.get(wifiInterface.ifname);
+		const incarnation = projectWifiRadioIncarnation(wifiInterface, identity);
 		if (incarnation !== undefined) entry.incarnation = incarnation;
 		if (wifiInterface.degradedReason !== undefined) {
 			entry.degraded_reason = wifiInterface.degradedReason;
 		}
-		if (
-			wifiInterface.supportsApStaConcurrency === true &&
-			isQualifiedNmManagedHybrid(wifiInterface.ifname)
-		) {
-			entry.supports_ap_sta_concurrency = true;
+		if (wifiInterface.supportsApStaConcurrency === true) {
+			const lifetime =
+				identity?.row === wifiInterface ? identity.incarnation : undefined;
+			if (refreshTelemetry) {
+				hybridStatusEvidence.set(wifiInterface, {
+					incarnation: lifetime,
+					qualified: isQualifiedNmManagedHybrid(wifiInterface.ifname),
+				});
+			}
+			const evidence = hybridStatusEvidence.get(wifiInterface);
+			if (evidence?.qualified && evidence.incarnation === lifetime)
+				entry.supports_ap_sta_concurrency = true;
 		}
 		ifs[id] = entry;
 
@@ -387,7 +420,10 @@ export function wifiBuildMsg() {
 			// One capability read backs both derivations, so the security the
 			// device OFFERS and the width it REPORTS can never describe different
 			// radios.
-			const hotspotCaps = getWifiCapabilitiesForInterface(wifiInterface.ifname);
+			const hotspotCaps = getWifiCapabilitiesForInterface(
+				wifiInterface.ifname,
+				refreshTelemetry,
+			);
 			const maxWidthMhz = offeredHotspotMaxWidth(hotspotCaps);
 			// In Hybrid mode, the AP leg is the concurrent virtual
 			// `clap-<parent>` netdev, not the parent station interface.
@@ -450,41 +486,60 @@ export function wifiBuildMsg() {
 		}
 
 		entry.mode = isApMode(wifiInterface) ? "hotspot" : "station";
-		if (isConcurrentHotspot(wifiInterface)) {
-			entry.observed_mode = "hybrid";
-		} else if (entry.mode === "hotspot") {
-			entry.observed_mode = "hotspot";
-		} else {
-			entry.observed_mode =
-				!wifiInterface.virtualModeUnresolved &&
-				(wifiInterface.activeConn === null ||
-					wifiInterface.activeMode === "infrastructure")
-					? "station"
-					: null;
-		}
-		if (canHotspot(wifiInterface) && wifiInterface.hotspot.transition) {
-			entry.transition = wifiInterface.hotspot.transition;
+		entry.observed_mode = displayObservedWifiAdapterMode(wifiInterface);
+		let needsLocalOverride = false;
+		if (canHotspot(wifiInterface)) {
+			const localTransition = projectHotspotTransition(wifiInterface);
+			const rawTransition = wifiInterface.hotspot.transition;
+			const transition =
+				legacyTransitions || legacyOverrides ? rawTransition : localTransition;
+			if (transition !== undefined) entry.transition = transition;
+			const leaving = projectWifiModeWitness(wifiInterface, incarnation);
+			if (leaving !== undefined) entry.leaving = leaving;
+			needsLocalOverride = transition !== localTransition;
 		}
 
-		const capabilities = getWifiCapabilitiesForInterface(wifiInterface.ifname);
+		const capabilities = getWifiCapabilitiesForInterface(
+			wifiInterface.ifname,
+			refreshTelemetry,
+		);
 		if (capabilities !== undefined) {
 			entry.capabilities = capabilities;
 		}
 
 		applyScanStamp(entry, id);
+		if (legacyOverrides && needsLocalOverride) {
+			// Keep the raw flag in its original wire order without rebuilding telemetry.
+			legacyOverrides[id] = entry;
+			const { transition: _rawTransition, ...local } = entry;
+			ifs[id] = local;
+		}
 	}
 
 	// Fire-and-forget, after the snapshot is assembled: the read is bounded by
 	// its own TTL and never throws, so a broadcast is never blocked on a spawn
 	// and the next build serves whatever this one produced.
-	void refreshWifiLinkTelemetry(stationIfnames);
+	if (refreshTelemetry) void refreshWifiLinkTelemetry(stationIfnames);
 
 	return ifs;
 }
 
 export function broadcastWifiState() {
-	broadcastMsg("status", { wifi: wifiBuildMsg() });
+	const legacyOverrides: WifiStatusRows = {};
+	const wifi = buildWifiSnapshot(true, { legacyOverrides });
+	if (Object.keys(legacyOverrides).length > 0) {
+		broadcastMsg("status", { wifi }, 0, true, {
+			wifi: { ...wifi, ...legacyOverrides },
+		});
+	} else {
+		broadcastMsg("status", { wifi });
+	}
 	recordHotspotClientsBroadcast();
+}
+
+export function broadcastWifiModeSettlement() {
+	// Settlement is display-only, not another discovery or telemetry poll.
+	broadcastMsgLocal("status", { wifi: buildWifiSnapshot(false) });
 }
 
 setWifiRadioPublicationListener(() => {

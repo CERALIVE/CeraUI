@@ -88,6 +88,18 @@ export function observedWifiAdapterMode(
 	return "station";
 }
 
+/** Unlike policy's Station fallback, the UI must be able to report unknown. */
+export function displayObservedWifiAdapterMode(
+	row: WifiInterface,
+): WifiAdapterMode | null {
+	const mode = observedWifiAdapterMode(row);
+	return mode !== "station" ||
+		(!row.virtualModeUnresolved &&
+			(row.activeConn === null || row.activeMode === "infrastructure"))
+		? mode
+		: null;
+}
+
 export interface WifiAdapterModeCapability {
 	/** Can this radio host an access point at all? */
 	readonly supportsHotspot: boolean;

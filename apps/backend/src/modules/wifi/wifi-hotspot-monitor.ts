@@ -42,10 +42,12 @@ import {
 import { registerWifiAdapterLegRelease } from "./wifi-adapter-reconcile-retry.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
 import { nmDisconnectActivation } from "./wifi-hotspot-activity.ts";
+import { claimHotspotTransition } from "./wifi-hotspot-transition.ts";
 import type {
 	HotspotActivationDeps,
 	HotspotActivationInstance,
 	HotspotConfirmationTarget,
+	HotspotStartPublication,
 	WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import {
@@ -53,6 +55,7 @@ import {
 	releaseHybridLeg,
 } from "./wifi-hybrid-leg-release.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
+import { captureWifiModeWitness } from "./wifi-mode-witness.ts";
 import {
 	type WifiOperationBinding,
 	wifiOperationGuard,
@@ -94,6 +97,7 @@ type PendingHotspot = {
 	readonly connName: string;
 	readonly row: WifiInterfaceWithHotspot;
 	readonly controller: AbortController;
+	readonly onSuperseded: (() => void) | undefined;
 	readonly matches: () => boolean;
 	readonly probe: () => Promise<boolean>;
 	readonly confirm: () => void;
@@ -210,11 +214,12 @@ export function settlePending(
 export function beginHotspotTransition(
 	wifiInterface: WifiInterfaceWithHotspot,
 	transition: NonNullable<WifiInterfaceWithHotspot["hotspot"]["transition"]>,
-): void {
-	for (const previous of [
+) {
+	const superseded = new Set([
 		pendingByRow.get(wifiInterface),
 		pendingHotspots.get(wifiInterface.ifname),
-	]) {
+	]);
+	for (const previous of superseded) {
 		if (!previous) continue;
 		previous.controller.abort();
 		if (pendingHotspots.get(previous.ifname) === previous)
@@ -222,7 +227,10 @@ export function beginHotspotTransition(
 		if (pendingByRow.get(previous.row) === previous)
 			pendingByRow.delete(previous.row);
 	}
-	wifiInterface.hotspot.transition = transition;
+	captureWifiModeWitness(wifiInterface);
+	const claim = claimHotspotTransition(wifiInterface, transition);
+	for (const previous of superseded) previous?.onSuperseded?.();
+	return claim;
 }
 
 /** Events trigger selected-AP observation; names or parent connectivity are not proof. */
@@ -254,9 +262,11 @@ export function registerPendingConfirmation(
 		readonly binding?: WifiOperationBinding | undefined;
 		readonly radioProof?: ReturnType<typeof wifiOperationGuard>["observe"];
 		readonly allocation?: HybridLegAllocation;
+		readonly transition?: ReturnType<typeof claimHotspotTransition>;
 	},
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
+	publication: HotspotStartPublication = deps,
 ): void {
 	transitionVirtualBinding(wifiInterface, { kind: "associate" });
 	const ifname = wifiInterface.ifname;
@@ -268,6 +278,11 @@ export function registerPendingConfirmation(
 	const lifetime = wifiRadioIdentity.state.rows.get(ifname)?.lifetime;
 	const apLifetime = wifiRadioIdentity.state.rows.get(target.ifname)?.lifetime;
 	const binding = target.binding;
+	const transition = target.transition;
+	const clearTransition = () => {
+		if (transition) transition.clear();
+		else delete hotspot.transition;
+	};
 	const radioProof = target.radioProof ?? wifiOperationGuard(binding).observe;
 	const ownsCache = (): boolean =>
 		wifiInterface.hotspot === hotspot && hotspot.conn === target.uuid;
@@ -294,11 +309,12 @@ export function registerPendingConfirmation(
 				activeConn: target.uuid,
 			});
 		else wifiInterface.conn = target.uuid;
-		delete hotspot.transition;
+		clearTransition();
 		if (!virtual) deps.setDupIpSuppression(ifname, false);
 		deps.broadcastState();
+		transition?.finish(false);
 		syncWifiStateCache(target.macAddress, wifiInterface);
-		deps.publishOutcome?.("start", device, { success: true });
+		publication.publishOutcome?.("start", device, { success: true });
 	};
 	const reportFailure = (
 		changed: { readonly stopped: boolean } | undefined,
@@ -308,7 +324,7 @@ export function registerPendingConfirmation(
 			wifiInterface.hotspot === hotspot &&
 			(!binding || getWifiInterfaceByMacAddress(binding.key) === wifiInterface)
 		) {
-			delete hotspot.transition;
+			clearTransition();
 			if (ownsCache()) {
 				const binding = wifiInterface.concurrentHotspot;
 				if (
@@ -322,9 +338,11 @@ export function registerPendingConfirmation(
 				if (!virtual) deps.setDupIpSuppression(ifname, false);
 			}
 			deps.broadcastState();
+			transition?.finish(false);
 			syncWifiStateCache(target.macAddress, wifiInterface);
 		}
-		deps.publishOutcome?.("start", device, {
+		transition?.finish();
+		publication.publishOutcome?.("start", device, {
 			success: false,
 			error: changed ? "radio-changed" : "not-confirmed",
 			...(releasePending || (changed && !changed.stopped)
@@ -447,6 +465,10 @@ export function registerPendingConfirmation(
 		connName: hotspot.name ?? ifname,
 		row: wifiInterface,
 		controller,
+		onSuperseded: () => {
+			transition?.finish();
+			publication.onConfirmationSuperseded?.();
+		},
 		matches,
 		probe,
 		confirm,

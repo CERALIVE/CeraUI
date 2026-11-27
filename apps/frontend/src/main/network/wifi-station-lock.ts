@@ -13,12 +13,9 @@
  * it was, disabled, carrying the reason on screen. It is not enough to put that
  * reason in a `title` — the shipped kiosk touchscreen cannot hover.
  *
- * The lock is also GUARANTEED TO LIFT. It is derived from the keyed async-op
- * phases, and every one of those has a terminal state: `confirmed` / `failed`
- * from the device's own terminal frame (todo 2's F-07 guarantee, extended to
- * `adapter_mode` by todo 7), or `timed_out` from the store's absolute TTL valve
- * when the device never answers at all. There is no phase that stays `pending`
- * forever, so there is no eternal disable.
+ * Keyed operation phases settle on a terminal event or the local TTL. A peer
+ * may have only the adapter row; its transition evidence holds the lock until
+ * the device publishes a settled row, even if a terminal event arrives first.
  *
  * Two operations, TWO keys, one lock:
  *   `hotspot:<device>`    the hotspot start/stop op (`WifiSection`, `HotspotDialog`)
@@ -32,6 +29,7 @@
  * Pure and rune-free — it takes phases, not the store.
  */
 
+import type { WifiInterface } from "@ceraui/rpc/schemas";
 import type { AsyncOpPhase } from "$lib/rpc/async-operation.svelte";
 
 /** The op-key prefix the hotspot start/stop transition is registered under. */
@@ -68,6 +66,7 @@ export type WifiStationLockKind = "hotspot" | "mode";
 export interface WifiStationLockPhases {
 	hotspot: AsyncOpPhase;
 	mode: AsyncOpPhase;
+	status?: Pick<WifiInterface, "transition" | "leaving">;
 }
 
 /**
@@ -122,6 +121,9 @@ export function deriveWifiStationLock(
 ): WifiStationLock {
 	if (phases.mode === "pending") return locked("mode");
 	if (phases.hotspot === "pending") return locked("hotspot");
+	// A newly opened tab may have only the device's row, not the pending event.
+	if (phases.status?.transition !== undefined) return locked("hotspot");
+	if (phases.status?.leaving !== undefined) return locked("mode");
 
 	const modeFailure = failureFor("mode", phases.mode);
 	if (modeFailure) return modeFailure;

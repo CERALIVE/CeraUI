@@ -24,7 +24,7 @@
   disabled Connect when a secured network's password is shorter than the minimum.
 -->
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { AvailableWifiNetwork, WifiStatus } from '@ceraui/rpc/schemas';
 import { TriangleAlert, Wifi } from '@lucide/svelte';
 import { untrack } from 'svelte';
@@ -52,6 +52,11 @@ import {
 	type PendingWifiConnect,
 } from '$lib/rpc/wifi-connect-identity';
 import { hasScanGenerationAdvanced } from '$lib/rpc/wifi-scan-generation';
+import {
+	deriveWifiStationLock,
+	wifiHotspotOpKey,
+	wifiModeOpKey,
+} from '$main/network/wifi-station-lock';
 
 import WifiNetworkList from './WifiNetworkList.svelte';
 
@@ -72,11 +77,12 @@ const wifi = $derived<WifiStatus | undefined>(getWifi());
 const iface = $derived(wifi?.[deviceId]);
 const ifaceLabel = $derived(iface ? linkName(iface.ifname) : '');
 
-// Interface-level transition (T3 additive wifi schema). 'activating' means a
-// connect is already in flight at the NetworkManager layer (DEVICE_BUSY guard) —
-// gate every Connect action and surface a busy chip so the operator can't queue
-// a conflicting request mid-transition.
-const ifaceBusy = $derived(iface?.transition === 'activating');
+const stationLock = $derived(deriveWifiStationLock({
+	hotspot: getOperationPhase(wifiHotspotOpKey(deviceId, iface?.incarnation)),
+	mode: getOperationPhase(wifiModeOpKey(deviceId, iface?.incarnation)),
+	status: iface,
+}));
+const ifaceBusy = $derived(stationLock.locked);
 
 const sortedNetworks = $derived(
 	[...(iface?.available ?? [])].sort((a, b) => {
@@ -231,7 +237,7 @@ function handleConnectSaved(uuid: string, network: AvailableWifiNetwork) {
 }
 
 async function handleDisconnect(uuid: string, network: AvailableWifiNetwork) {
-	if (isOperationPending(wifiOpKey)) return;
+	if (ifaceBusy || isOperationPending(wifiOpKey)) return;
 	disconnecting = uuid;
 	await osCommand({
 		key: wifiOpKey,
@@ -284,8 +290,8 @@ function submitNew() {
 }
 
 async function handleForget(uuid: string, network: AvailableWifiNetwork) {
+	if (ifaceBusy || isOperationPending(wifiOpKey)) return;
 	confirmForget = undefined;
-	if (isOperationPending(wifiOpKey)) return;
 	forgetting = uuid;
 	await osCommand({
 		key: wifiOpKey,
@@ -482,6 +488,12 @@ $effect(() => {
 				</p>
 			</div>
 		</div>
+	{/if}
+
+	{#if stationLock.reasonKey}
+		<p class="text-muted-foreground mb-3 text-xs" role="status">
+			{resolveMessageKey(stationLock.reasonKey)}
+		</p>
 	{/if}
 
 	<WifiNetworkList

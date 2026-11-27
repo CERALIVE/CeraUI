@@ -22,13 +22,16 @@ over cached `getAdapterModes` mode in either direction. It does not change the
 pull's offered choices or the physical `mode` used for bonding. An explicit
 `null` withholds the mode badge and selector choice until the device can verify
 the mode; an omitted field preserves older-device behavior, where a visible AP
-outranks a cached Station. While a mode change is pending, the selector keeps
-the prior mode
-until the matching terminal arrives. The control records that mode in its
-request (`WifiModeRequest.from`) as it begins, and the device's own pending echo
-keeps it, so it holds even when the device never answered `getAdapterModes`. A
-change begun on another client carries no record and falls back to the device's
-preference, then its cached answer.
+outranks a cached Station. During a local mode change the initiating control
+keeps its prior mode from `WifiModeRequest.from`. Other clients can use the
+adapter row's `leaving` witness even if they missed the pending event and never
+received `getAdapterModes`. `leaving: null` means the prior mode is unknown.
+Older rows without that witness keep the existing fallbacks.
+
+The Wi-Fi row and Hotspot Setup use the same transition lock. Setup remains
+readable, but start, stop, save and mode changes are disabled with the existing
+localized reason. A terminal event alone does not unlock a row still reporting
+a transition; the settled adapter row does.
 
 **THE CREDENTIAL QUESTION HAS TWO WITNESSES [EXISTS].** The label can outlive the
 access point it names, so it does not decide alone whether the name and password

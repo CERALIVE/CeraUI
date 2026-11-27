@@ -264,7 +264,7 @@ function handleRemote(conn: WebSocket, msg: RemoteMessage) {
 				);
 				if (value === true) {
 					addAuthedSocket(conn);
-					sendInitialStatus(conn);
+					sendInitialStatus(conn, "legacy-remote");
 					broadcastMsgLocal(
 						"status",
 						{ remote: true } satisfies StatusResponseMessage,

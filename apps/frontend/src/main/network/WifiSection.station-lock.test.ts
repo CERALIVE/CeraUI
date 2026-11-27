@@ -126,6 +126,28 @@ describe("WifiSection — station controls during a pending adapter transition",
 		expect(queryByTestId("wifi-station-lock-failed")).toBeNull();
 	});
 
+	it.each([
+		{ leaving: "station" },
+		{ leaving: null },
+		{ transition: "activating" },
+	] satisfies Partial<WifiInterface>[])(
+		"locks station controls on a peer snapshot without a pending event: %j",
+		async (status) => {
+			const { getByTestId, queryByTestId, rerender } = renderSection(status);
+			expect(connectButton().disabled).toBe(true);
+			expect(bondSwitch().hasAttribute("disabled")).toBe(true);
+			const reason = getByTestId("wifi-station-locked");
+			expect(reason.dataset.lockKind).toBe(
+				status.transition ? "hotspot" : "mode",
+			);
+
+			await rerender({ wifiRadios: [[DEVICE, wifiIface()]] });
+			expect(connectButton().disabled).toBe(false);
+			expect(bondSwitch().hasAttribute("disabled")).toBe(false);
+			expect(queryByTestId("wifi-station-locked")).toBeNull();
+		},
+	);
+
 	it("disables Connect WITH A VISIBLE REASON while a hotspot change is pending", async () => {
 		const { getByTestId } = renderSection();
 		expect(connectButton().disabled).toBe(false);

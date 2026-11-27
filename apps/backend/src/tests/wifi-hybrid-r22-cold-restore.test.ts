@@ -243,9 +243,7 @@ test.each(["cold", "borrowed"] as const)(
 								credentials: hotspotCredentialsStore,
 								publishOutcome: publish,
 							},
-							undefined,
-							attempt,
-							binding,
+							{ restoreAttempt: attempt, binding },
 						);
 					},
 					publishHotspotOutcome: () => undefined,
@@ -322,9 +320,8 @@ async function verifiedProfileFixture(cold: boolean) {
 		deps,
 		profile,
 		startVerified: () =>
-			startHotspotLocked(MAC, f.row, deps, undefined, undefined, {
-				...binding,
-				bootRestore: "require-port-pin",
+			startHotspotLocked(MAC, f.row, deps, {
+				binding: { ...binding, bootRestore: "require-port-pin" },
 			}),
 		radioWrites: () =>
 			f.target.calls.filter(

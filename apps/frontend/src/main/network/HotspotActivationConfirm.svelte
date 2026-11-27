@@ -41,6 +41,7 @@ interface Props {
 	session?: number;
 	reloaded?: boolean;
 	focusOnOpen?: boolean;
+	locked?: boolean;
 	/** The radio's station leg survives (hybrid), so no disconnect is threatened. */
 	keepsStation?: boolean;
 	/** Action label; defaults to "Turn on hotspot". */
@@ -51,7 +52,7 @@ interface Props {
 	onCancel: () => void;
 }
 
-const { device, incarnation, degradedReason, session = 0, reloaded = false, focusOnOpen = false, keepsStation = false, confirmLabel, detail, onConfirm, onCancel }: Props =
+const { device, incarnation, degradedReason, session = 0, reloaded = false, focusOnOpen = false, locked = false, keepsStation = false, confirmLabel, detail, onConfirm, onCancel }: Props =
 	$props();
 const uid = $props.id();
 let panel: HTMLDivElement;
@@ -105,7 +106,8 @@ async function prepare(captured: WifiRadioBinding, seq: number, chosen?: { name:
 		const next = await waitForWifiStatus(captured.device, controller.signal);
 		await tick();
 		if (observation === controller) { observation = undefined; awaitingStatus = false; }
-		if (seq !== attempt || captured.device !== device || captured.link !== getLinkEpoch()) return;
+		if (seq !== attempt || captured.device !== device || captured.link !== getLinkEpoch() ||
+			(chosen !== undefined && locked)) return;
 		if (!next?.incarnation) {
 			focusBeforeReload();
 			phase = 'unsupported';
@@ -194,6 +196,26 @@ $effect.pre(() => {
 	});
 });
 
+// The binding can stay the same while another tab changes the credentials or
+// uplink. A lock edge retires a submitted acknowledgement and its retry.
+let wasLocked = false;
+$effect.pre(() => {
+	const busy = locked;
+	untrack(() => {
+		if (busy && !wasLocked) {
+			acknowledged = false;
+			if (phase === 'saving') {
+				attempt += 1;
+				observation?.abort();
+				phase = 'ready';
+			}
+		} else if (!busy && wasLocked) {
+			void load();
+		}
+		wasLocked = busy;
+	});
+});
+
 const nameError = $derived(
 	name.length < bounds.name.min
 		? m['hotspotConfigurator.validation.nameMinLength']()
@@ -210,7 +232,7 @@ const passwordError = $derived(
 				? m['hotspotConfirm.passwordCharacters']()
 				: '',
 );
-const canConfirm = $derived(phase === 'ready' && acknowledged && !nameError && !passwordError);
+const canConfirm = $derived(!locked && phase === 'ready' && acknowledged && !nameError && !passwordError);
 
 // The acknowledgement is for the pair on screen; a new pair needs a new one.
 function edited() {
@@ -274,7 +296,7 @@ async function confirm() {
 		}
 		phase = 'ready';
 	}
-	if (current(seq, captured)) onConfirm(captured.incarnation);
+	if (!locked && current(seq, captured)) onConfirm(captured.incarnation);
 }
 </script>
 
@@ -349,6 +371,7 @@ async function confirm() {
 					aria-invalid={Boolean(nameError)}
 					data-testid="hotspot-confirm-name"
 					maxlength={bounds.name.max}
+					readonly={locked}
 					oninput={edited}
 					bind:value={name}
 				/>
@@ -385,6 +408,7 @@ async function confirm() {
 					aria-invalid={Boolean(passwordError)}
 					data-testid="hotspot-confirm-password"
 					maxlength={bounds.password.max}
+					readonly={locked}
 					oninput={edited}
 					type="text"
 					bind:value={password}
@@ -407,6 +431,7 @@ async function confirm() {
 			<Button
 				class="h-8 min-h-[var(--touch-target-min)] px-2"
 				data-testid="hotspot-confirm-generate"
+				disabled={locked}
 				onclick={rollPassword}
 				size="sm"
 				type="button"
@@ -422,6 +447,7 @@ async function confirm() {
 				id="hotspot-confirm-ack-{uid}"
 				class="mt-0.5 size-5"
 				data-testid="hotspot-confirm-ack"
+				disabled={locked}
 				bind:checked={acknowledged}
 			/>
 			<span>{m['hotspotConfirm.acknowledge']()}</span>
