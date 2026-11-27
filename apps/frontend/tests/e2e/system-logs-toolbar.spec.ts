@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 
 import type { Page } from '@playwright/test';
 
+import en from '../../../../packages/i18n/messages/en.json' with { type: 'json' };
 import { expect, test } from './fixtures/index.js';
 import type { PageRpc } from './fixtures/page-rpc.js';
 import { ensureAuthenticated, navigateTo } from './helpers/index.js';
@@ -255,7 +256,7 @@ test.describe('System Logs toolbar', { tag: '@desktop-only' }, () => {
 			name: 'widening to desktop removes the phone header boot picker that had focus',
 			from: PHONE,
 			to: DESKTOP,
-			opener: (page: Page) => page.getByRole('dialog', { name: 'System Logs' }).getByRole('button', { name: /^Choose a boot/ }),
+			opener: (page: Page) => page.getByRole('dialog', { name: 'System Logs' }).getByRole('button', { name: [en['systemLogs.boots.open'], en['systemLogs.boots.all']].join(' '), exact: true }),
 		},
 		{
 			name: 'narrowing to a phone removes the side column control that had focus',

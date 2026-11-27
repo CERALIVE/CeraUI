@@ -460,10 +460,10 @@ describe("RawLogsTab: filters", () => {
 	it("searches on Enter and clears the search", async () => {
 		await mounted();
 		const search = screen.getByRole("textbox", {
-			name: en.systemLogs.raw.searchLabel,
+			name: en.systemLogs.raw.searchInputLabel,
 		});
 		expect(search.getAttribute("placeholder")).toBe(
-			en.systemLogs.raw.searchLabel,
+			en.systemLogs.raw.searchInputLabel,
 		);
 		expect(search.parentElement?.className).toContain("min-w-32");
 		expect(search.parentElement?.className).toContain("flex-1");
@@ -486,7 +486,7 @@ describe("RawLogsTab: filters", () => {
 		expect((search as HTMLInputElement).value).toBe("");
 	});
 
-	it("shortens the search placeholder while the filters are folded and keeps the full name", async () => {
+	it("shortens the search placeholder without changing the accessible name", async () => {
 		// The Filters button renders only while the bar folds its filters; browsers report its size through ResizeObserver.
 		let report: ((width: number) => void) | undefined;
 		class FoldObserver {
@@ -518,10 +518,10 @@ describe("RawLogsTab: filters", () => {
 		try {
 			await mounted();
 			const search = screen.getByRole("textbox", {
-				name: en.systemLogs.raw.searchLabel,
+				name: en.systemLogs.raw.searchInputLabel,
 			});
 			expect(search.getAttribute("placeholder")).toBe(
-				en.systemLogs.raw.searchLabel,
+				en.systemLogs.raw.searchInputLabel,
 			);
 
 			report?.(96);
@@ -529,14 +529,22 @@ describe("RawLogsTab: filters", () => {
 			expect(search.getAttribute("placeholder")).toBe(
 				en.systemLogs.raw.searchShort,
 			);
-			expect(search.getAttribute("aria-label")).toBe(
-				en.systemLogs.raw.searchLabel,
-			);
+			expect(
+				screen.getByRole("textbox", {
+					name: en.systemLogs.raw.searchInputLabel,
+					exact: true,
+				}),
+			).toBe(search);
 
 			report?.(0);
 			await tick();
+			expect(
+				screen.getByRole("textbox", {
+					name: en.systemLogs.raw.searchInputLabel,
+				}),
+			).toBe(search);
 			expect(search.getAttribute("placeholder")).toBe(
-				en.systemLogs.raw.searchLabel,
+				en.systemLogs.raw.searchInputLabel,
 			);
 		} finally {
 			delete view.ResizeObserver;
@@ -546,7 +554,7 @@ describe("RawLogsTab: filters", () => {
 	it("ignores keys other than Enter in the search box", async () => {
 		await mounted();
 		const search = screen.getByRole("textbox", {
-			name: en.systemLogs.raw.searchLabel,
+			name: en.systemLogs.raw.searchInputLabel,
 		});
 		await fireEvent.input(search, { target: { value: "x" } });
 		await fireEvent.keyDown(search, { key: "a" });

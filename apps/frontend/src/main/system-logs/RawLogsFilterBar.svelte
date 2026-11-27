@@ -5,7 +5,7 @@
   and fold behind a Filters button otherwise (the 1024x600 kiosk, phones). The
   fold is a container query on this bar, so the 320 px side column counts.
   While folded, Search shares its row with Filters and Follow, so its
-  placeholder is the short form; its accessible name stays the full label.
+  placeholder uses the short form, which is included in the stable full name.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
@@ -30,6 +30,7 @@ let open = $state(false);
 let filtersToggle = $state<HTMLElement | null>(null);
 // The Filters button renders only while the container query folds the filters.
 let compact = $state(false);
+const searchLabel = $derived(m['systemLogs.raw.searchInputLabel']());
 
 // Absent ResizeObserver (jsdom) keeps the full placeholder.
 $effect(() => {
@@ -82,7 +83,7 @@ function chooseTime(value: string): void {
 		<div class="relative min-w-32 flex-1">
 			<Search class="text-muted-foreground pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2" />
 			<Input
-				aria-label={m['systemLogs.raw.searchLabel']()}
+				aria-label={searchLabel}
 				class={cn('min-h-(--touch-target-min) ps-8 pe-9 text-ellipsis', view.draft !== '' && 'max-sm:pe-14')}
 				data-testid="raw-search"
 				enterkeyhint="search"
@@ -90,7 +91,7 @@ function chooseTime(value: string): void {
 				onkeydown={(event) => {
 					if (event.key === 'Enter') void view.applyDraft();
 				}}
-				placeholder={compact ? m['systemLogs.raw.searchShort']() : m['systemLogs.raw.searchLabel']()}
+				placeholder={compact ? m['systemLogs.raw.searchShort']() : searchLabel}
 				value={view.draft}
 			/>
 			{#if view.draft !== ''}

@@ -75,7 +75,7 @@ const button = (kind: "device" | "system") =>
 describe("LegacyLogDownloads: the two shipped rows", () => {
 	it.each([
 		["device", en.advanced.ceraliveLog, en.advanced.ceraliveLogTooltip],
-		["system", en.advanced.systemLog, en.advanced.systemLogTooltip],
+		["system", en.advanced.systemLog, en.advanced.systemLogDownloadHint],
 	] as const)(
 		"renders the %s row with its title, description and Download",
 		(kind, title, desc) => {
@@ -87,6 +87,12 @@ describe("LegacyLogDownloads: the two shipped rows", () => {
 				"text-muted-foreground",
 			);
 			expect(button(kind).textContent?.trim()).toBe(en.advanced.download);
+			expect(
+				screen.getByRole("button", {
+					name: [title, en.advanced.download].join(" "),
+					exact: true,
+				}),
+			).toBe(button(kind));
 			expect(button(kind).disabled).toBe(false);
 			expect(screen.queryByTestId("log-download-error")).toBeNull();
 			expect(row.className).toContain("rounded-lg");
@@ -171,6 +177,12 @@ describe("LegacyLogDownloads: the shipped anatomy", () => {
 		expect(tokens(button("system").querySelector("svg"))).toContain("size-4");
 
 		await fireEvent.click(button("device"));
+		expect(
+			screen.getByRole("button", {
+				name: [en.advanced.ceraliveLog, en.advanced.downloading].join(" "),
+				exact: true,
+			}),
+		).toBe(button("device"));
 		expect(tokens(button("device").querySelector("svg"))).toEqual(
 			expect.arrayContaining([
 				"size-4",
@@ -195,7 +207,7 @@ describe("LegacyLogDownloads: the shipped anatomy", () => {
 			.not.toBeNull();
 		for (const text of [
 			zh.advanced.ceraliveLogTooltip,
-			zh.advanced.systemLogTooltip,
+			zh.advanced.systemLogDownloadHint,
 			zh.advanced.downloadFailed,
 		]) {
 			expect(wraps(text)).toBeGreaterThan(0);
