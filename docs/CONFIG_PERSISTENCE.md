@@ -93,7 +93,15 @@ confirms the change. Boot adopts the unit's enabled/disabled state when the
 field is absent; otherwise it reconciles the saved choice after SSH password
 sync. A mask is never changed, errors do not block boot, and temporary SSH
 Start/Stop never writes this field. A damaged-config rebuild loses the choice
-and adopts the current unit without changing it. See the
+and adopts the current unit without changing it.
+
+Saved off also stops `ssh.service` on the first reconciliation of each boot,
+which cancels a queued start too, unless an operator Start/Stop already
+succeeded in that process. A marker in `/run/ceralive` then keeps later backend restarts in
+the same boot from stopping temporary SSH. If the stop fails, no marker is
+written and the next reconciliation, normally a backend restart, tries again.
+Production images disable `ssh.socket`. CeraUI manages `ssh.service` only, so
+a socket enabled independently can still activate SSH. See the
 [SSH module contract](../apps/backend/docs/agents/dev-mock-seams.md#ssh-boot-persistence-is-a-second-axis-not-a-side-effect-exists).
 
 Streaming format settings keep their existing saved keys and defaults.

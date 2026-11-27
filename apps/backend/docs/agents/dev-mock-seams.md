@@ -365,19 +365,38 @@ reach this slot. Reconciliation reads the raw unit state, because the boolean
 wire status intentionally maps both masks and probe failures to false:
 
 - With no saved choice, record only an exact `enabled` or `disabled` reading
-  without changing the unit. Damaged-config recovery discards non-credential
-  fields, so a rebuilt config follows the same adoption path.
+  without changing the unit. A runtime mask or link can hide a persistent one,
+  so other states are not evidence of a choice. Damaged-config recovery
+  discards non-credential fields, so a rebuilt config follows the same path.
 - Saved true plus disabled runs `enable ssh`, then `start ssh`, only with a
-  persisted `ssh_pass` and successful password sync on this boot.
-- Saved false plus enabled runs `disable ssh` and leaves any running session
-  alone. An already matching unit needs no command.
-- Masked, runtime-only and other non-enabled/disabled states are untouched.
-  Probe, command and config-save errors are logged and swallowed; under mocks
+  persisted `ssh_pass` and successful password sync on this boot. The start is
+  skipped if an operator Start/Stop already succeeded in this process.
+- Saved false removes an enabled link. The first reconciliation of a boot
+  also runs `stop ssh` even if the link is already absent or the probe fails.
+  Stop replaces a queued start job as well as stopping an active daemon.
+  An operator Start/Stop that succeeded earlier in this process wins and the
+  boot stop is skipped. Boot and operator start/stop commands run one at a
+  time, so a Start issued during the boot stop reaches systemd after it. The
+  backend then records completion in a marker under
+  `/run/ceralive`, creating the directory if needed. `/run` is cleared at boot
+  and kept across backend restarts. Once the marker exists, later backend
+  starts keep temporary SSH available and still repair an enabled boot link.
+  A failed stop writes no marker, so the next reconciliation, normally a
+  backend restart, tries again. The live persistence toggle only changes the
+  boot link.
+- Masks, runtime links and other nonstandard unit-file states stay in place.
+  Probe, command and config-save errors are logged and swallowed. Under mocks
   reconciliation performs no probe, command or write.
 
-The boot restore uses the existing service/persistence runners. It needs no
-image change, RAUC hook or extra state file. This is host-tested behavior, not
-physical slot-update qualification.
+The shared choice survives a fallback if the old application leaves
+`config.json` intact. A pre-persistence application can change its local link
+without updating the choice, or omit the unknown field when rewriting the
+config. On return, CeraUI uses the choice still on disk or migrates the link
+in the current slot. Boot reconciliation can stop a daemon after it has
+started, since the backend runs after systemd has begun the boot transaction.
+The production image disables `ssh.socket`. This code manages
+`ssh.service` only and an independently enabled socket can still activate it.
+This is host-tested behavior, not physical slot-update qualification.
 
 The RPC is `system.sshSetPersistent` (`.strict()` input, same `authedProcedure` +
 streaming/updating gate as its sibling SSH mutations). Operator surface and its
@@ -398,7 +417,12 @@ sync, damaged-config rebuilds and the temporary-session no-write contract.
 Deferred-probe regressions hold an older confirmation while submitting the next
 request: both opposite-value orders, both same-value orders, each boot/setter
 interleaving, and failed, unconfirmed or rejected request recovery. They verify
-the final unit and saved choice agree and a subsequent boot issues no command.
+the final unit and saved choice agree and a subsequent boot changes no boot link;
+with saved off it only stops the service. The boot-stop cases cover a running
+daemon, a queued start, a throwing probe, a failed stop, a missing marker
+directory, backend restarts with temporary SSH, an operator Start or Stop
+before reconciliation settles, a failed operator Stop and a Start during an
+in-flight boot stop.
 
 ### SSH password sync on boot — OTA slot-swap fix [EXISTS]
 

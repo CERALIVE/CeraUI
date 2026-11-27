@@ -19,7 +19,13 @@
  * replaces it.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type WebSocket from "ws";
@@ -39,7 +45,7 @@ import {
 	getSshPasswordHash,
 	getSshStatus,
 	parseSystemctlIsEnabled,
-	reconcileSshPersistence,
+	reconcileSshPersistence as reconcile,
 	resetMockSshState,
 	resetSshPersistenceRunner,
 	resetSshServiceRunner,
@@ -87,6 +93,16 @@ let savedHash: string | undefined;
 let savedConfigPath: string;
 let configRoot: string;
 
+function reconcileSshPersistence(
+	passwordSynced: boolean,
+	deps: Partial<SshStatusDeps>,
+) {
+	return reconcile(passwordSynced, {
+		...deps,
+		bootMarkerPath: join(configRoot, "ssh-persistence-reconciled"),
+	});
+}
+
 beforeEach(() => {
 	savedNodeEnv = process.env.NODE_ENV;
 	savedMockMode = process.env.MOCK_MODE;
@@ -98,7 +114,7 @@ beforeEach(() => {
 	savedConfigPath = getConfigFilePath();
 	configRoot = mkdtempSync(join(tmpdir(), "ssh-persistence-"));
 	setConfigFilePath(join(configRoot, "config.json"));
-	getConfig().ssh_persistent = undefined;
+	delete getConfig().ssh_persistent;
 	saveConfig();
 	resetMockSshState();
 });
@@ -117,7 +133,8 @@ afterEach(() => {
 	restore("CERALIVE_DEVICE_TYPE", savedDeviceType);
 	setup.ssh_user = savedSshUser;
 	getConfig().ssh_pass = savedSshPass;
-	getConfig().ssh_persistent = savedPersistent;
+	if (savedPersistent === undefined) delete getConfig().ssh_persistent;
+	else getConfig().ssh_persistent = savedPersistent;
 	setSshPasswordHash(savedHash);
 	setConfigFilePath(savedConfigPath);
 	rmSync(configRoot, { recursive: true, force: true });
@@ -360,7 +377,7 @@ describe("SSH persistence request ordering", () => {
 			expect({ saved, unitBeforeBoot, bootCommands, unitEnabled }).toEqual({
 				saved: lastChoice,
 				unitBeforeBoot: lastChoice,
-				bootCommands: [],
+				bootCommands: lastChoice ? [] : ["stop"],
 				unitEnabled: lastChoice,
 			});
 		},
@@ -501,7 +518,7 @@ describe("reconcileSshPersistence - persisted boot choice", () => {
 
 	test.each([
 		[true, false, ["enable", "start"]],
-		[false, true, ["disable"]],
+		[false, true, ["disable", "stop"]],
 	] as const)(
 		"stored %p reconciles a unit enabled=%p",
 		async (choice, enabled, expected) => {
@@ -516,8 +533,253 @@ describe("reconcileSshPersistence - persisted boot choice", () => {
 		},
 	);
 
+	test.each([true, false])(
+		"saved off stops an already running sshd with enabled=%p",
+		async (enabled) => {
+			getConfig().ssh_persistent = false;
+			let active = true;
+			setSshServiceRunner(async (action) => {
+				calls.push(action);
+				active = action === "start";
+			});
+
+			await reconcileSshPersistence(false, statusDeps({ enabled, active }));
+
+			expect(active).toBe(false);
+			expect(calls).toEqual(enabled ? ["disable", "stop"] : ["stop"]);
+		},
+	);
+
+	test("saved off cancels a pending boot start even with the link gone", async () => {
+		getConfig().ssh_persistent = false;
+		let pendingStart = true;
+		setSshServiceRunner(async (action) => {
+			calls.push(action);
+			pendingStart = action === "start";
+		});
+
+		// systemd can report inactive while an earlier boot start is waiting.
+		await reconcileSshPersistence(
+			true,
+			statusDeps({ enabled: false, active: false }),
+		);
+
+		expect(calls).toEqual(["stop"]);
+		expect(pendingStart).toBe(false);
+	});
+
+	test.each([false, true])(
+		"backend restart preserves temporary SSH when boot began with saved %p",
+		async (initialChoice) => {
+			getConfig().ssh_persistent = initialChoice;
+			await reconcileSshPersistence(
+				true,
+				statusDeps({ enabled: initialChoice }),
+			);
+			expect(calls).toEqual(initialChoice ? [] : ["stop"]);
+
+			// The owner disables persistence and starts SSH for this boot.
+			expect(await setSshPersistent(false, statusDeps())).toBe(true);
+			expect(await startStopSsh(stubWs(), "start_ssh", statusDeps())).toBe(
+				true,
+			);
+			calls.length = 0;
+
+			// A restarted backend starts without this process's operator state.
+			resetSshServiceRunner();
+			setSshServiceRunner(async (action) => {
+				calls.push(action);
+			});
+
+			// A stale link still needs removal, but the live service is deliberate.
+			await reconcileSshPersistence(true, statusDeps({ enabled: true }));
+			expect(calls).toEqual(["disable"]);
+			expect(storedChoice()).toBe(false);
+		},
+	);
+
+	test("the first boot reconciliation creates a missing marker directory", async () => {
+		getConfig().ssh_persistent = false;
+		const deps = {
+			...statusDeps({ enabled: false }),
+			bootMarkerPath: join(configRoot, "run", "ceralive", "reconciled"),
+		};
+
+		await reconcile(true, deps);
+		await reconcile(true, deps);
+
+		expect(calls).toEqual(["stop"]);
+		expect(existsSync(deps.bootMarkerPath)).toBe(true);
+	});
+
+	test("a failed boot stop is retried before it counts as reconciled", async () => {
+		getConfig().ssh_persistent = false;
+		const deps = statusDeps({ enabled: false });
+		setSshServiceRunner(async () => {
+			throw new Error("stop failed");
+		});
+		await reconcileSshPersistence(true, deps);
+		expect(existsSync(join(configRoot, "ssh-persistence-reconciled"))).toBe(
+			false,
+		);
+
+		setSshServiceRunner(async (action) => {
+			calls.push(action);
+		});
+		await reconcileSshPersistence(true, deps);
+		await reconcileSshPersistence(true, deps);
+		expect(calls).toEqual(["stop"]);
+	});
+
+	test.each([true, false])(
+		"saved %p survives fallback to a link-only slot and back",
+		async (choice) => {
+			const currentSlot = { enabled: !choice, active: !choice };
+			const deps = {
+				...statusDeps(),
+				systemctlIsEnabled: async () => ({
+					stdout: currentSlot.enabled ? "enabled" : "disabled",
+					stderr: "",
+				}),
+			};
+			setSshPersistenceRunner(async (action) => {
+				calls.push(action);
+				currentSlot.enabled = action === "enable";
+			});
+			setSshServiceRunner(async (action) => {
+				calls.push(action);
+				currentSlot.active = action === "start";
+			});
+			getConfig().ssh_persistent = choice;
+			saveConfig();
+
+			// A boot of the older application loses the in-memory choice. Its
+			// own link is slot-local, and in this case it leaves the file intact.
+			delete getConfig().ssh_persistent;
+			await bootRuntimeConfig({ onDamagedReset: () => {} });
+			expect(getConfig().ssh_persistent).toBe(choice);
+			await reconcileSshPersistence(true, deps);
+
+			expect(currentSlot).toEqual({ enabled: choice, active: choice });
+			expect(calls).toEqual(choice ? ["enable", "start"] : ["disable", "stop"]);
+			expect(storedChoice()).toBe(choice);
+		},
+	);
+
+	test.each(["masked", "masked-runtime", "enabled-runtime", "static"])(
+		"migration leaves %p unrecorded and the unit untouched",
+		async (state) => {
+			await reconcileSshPersistence(true, {
+				systemctlIsEnabled: async () => ({ stdout: state, stderr: "" }),
+			});
+
+			// A runtime mask or link can hide a persistent link, so none of these
+			// is evidence of an operator choice.
+			expect(storedChoice()).toBeUndefined();
+			expect(calls).toEqual([]);
+		},
+	);
+
+	test("an operator Start during the boot probe is not undone by the boot stop", async () => {
+		getConfig().ssh_persistent = false;
+		let releaseProbe = () => {};
+		const probeHeld = new Promise<void>((resolve) => {
+			releaseProbe = resolve;
+		});
+		let active = false;
+		setSshServiceRunner(async (action) => {
+			calls.push(action);
+			active = action === "start";
+		});
+
+		const boot = reconcileSshPersistence(true, {
+			systemctlIsEnabled: async () => {
+				await probeHeld;
+				return { stdout: "disabled", stderr: "" };
+			},
+		});
+		expect(
+			await startStopSsh(stubWs(), "start_ssh", statusDeps({ active: true })),
+		).toBe(true);
+		releaseProbe();
+		await boot;
+
+		expect(calls).toEqual(["start"]);
+		expect(active).toBe(true);
+		expect(existsSync(join(configRoot, "ssh-persistence-reconciled"))).toBe(
+			true,
+		);
+	});
+
+	test("a failed operator Stop leaves the boot stop for saved off in place", async () => {
+		getConfig().ssh_persistent = false;
+		setSshServiceRunner(async (action) => {
+			calls.push(action);
+			if (calls.length === 1) throw new Error("stop failed");
+		});
+		expect(
+			await startStopSsh(stubWs(), "stop_ssh", statusDeps({ active: true })),
+		).toBe(false);
+
+		await reconcileSshPersistence(true, statusDeps({ enabled: false }));
+
+		expect(calls).toEqual(["stop", "stop"]);
+	});
+
+	test("an operator Start waits for an in-flight boot stop", async () => {
+		getConfig().ssh_persistent = false;
+		let releaseStop = () => {};
+		const stopHeld = new Promise<void>((resolve) => {
+			releaseStop = resolve;
+		});
+		let stopEntered = () => {};
+		const stopRunning = new Promise<void>((resolve) => {
+			stopEntered = resolve;
+		});
+		let active = true;
+		setSshServiceRunner(async (action) => {
+			calls.push(action);
+			if (action === "stop") {
+				stopEntered();
+				await stopHeld;
+			}
+			active = action === "start";
+		});
+
+		const boot = reconcileSshPersistence(true, statusDeps({ enabled: false }));
+		await stopRunning;
+		const start = startStopSsh(
+			stubWs(),
+			"start_ssh",
+			statusDeps({ active: true }),
+		);
+		try {
+			// Give the Start time to pass admission; it must not reach systemctl.
+			await Bun.sleep(20);
+			expect(calls).toEqual(["stop"]);
+		} finally {
+			releaseStop();
+		}
+		await boot;
+		expect(await start).toBe(true);
+		expect(calls).toEqual(["stop", "start"]);
+		expect(active).toBe(true);
+	});
+
+	test("an operator Stop before boot reconciliation keeps saved on from starting", async () => {
+		getConfig().ssh_persistent = true;
+		expect(
+			await startStopSsh(stubWs(), "stop_ssh", statusDeps({ active: false })),
+		).toBe(true);
+
+		await reconcileSshPersistence(true, statusDeps({ enabled: false }));
+
+		// The boot link is still repaired; only the running service is left alone.
+		expect(calls).toEqual(["stop", "enable"]);
+	});
+
 	test.each(["masked", "masked-runtime", "static", "enabled-runtime", ""])(
-		"%s is never changed or recorded as an operator choice",
+		"saved on preserves the unit and config when the probe reports %p",
 		async (state) => {
 			getConfig().ssh_persistent = true;
 			const before = readFileSync(getConfigFilePath(), "utf8");
@@ -542,8 +804,33 @@ describe("reconcileSshPersistence - persisted boot choice", () => {
 		expect(readFileSync(getConfigFilePath(), "utf8")).toBe(before);
 	});
 
+	test("saved off still stops at boot when the enablement probe throws", async () => {
+		getConfig().ssh_persistent = false;
+		saveConfig();
+		const before = readFileSync(getConfigFilePath(), "utf8");
+
+		await expect(
+			reconcileSshPersistence(true, {
+				systemctlIsEnabled: async () => {
+					throw new Error("systemctl unavailable");
+				},
+			}),
+		).resolves.toBeUndefined();
+
+		expect(calls).toEqual(["stop"]);
+		expect(readFileSync(getConfigFilePath(), "utf8")).toBe(before);
+	});
+
+	test("an empty enablement probe leaves the migration choice unset", async () => {
+		await reconcileSshPersistence(true, {
+			systemctlIsEnabled: async () => ({ stdout: " \n", stderr: "" }),
+		});
+		expect(calls).toEqual([]);
+		expect(storedChoice()).toBeUndefined();
+	});
+
 	test.each([true, false])(
-		"a throwing persistence runner preserves choice=%p and never starts",
+		"a throwing persistence runner preserves choice=%p and still stops for off",
 		async (choice) => {
 			getConfig().ssh_persistent = choice;
 			saveConfig();
@@ -556,7 +843,7 @@ describe("reconcileSshPersistence - persisted boot choice", () => {
 				reconcileSshPersistence(true, statusDeps({ enabled: !choice })),
 			).resolves.toBeUndefined();
 
-			expect(calls).toEqual([]);
+			expect(calls).toEqual(choice ? [] : ["stop"]);
 			expect(readFileSync(getConfigFilePath(), "utf8")).toBe(before);
 		},
 	);
