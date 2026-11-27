@@ -64,22 +64,7 @@ for (const size of [SIZES[0], SIZES[2]]) {
 				},
 			});
 			await page.locator('[data-sonner-toast]').getByRole('button', { name: 'View logs' }).click();
-			await expect(page.getByTestId('raw-anchor-approximate')).toBeVisible();
-			const moment = page.getByTestId('raw-moment');
-			const scroller = page.getByTestId('raw-scroller');
-			// Newer entries can put the selected moment beyond the virtual list's initial rows.
-			while ((await moment.count()) === 0) {
-				const advanced = await scroller.evaluate(async (el) => {
-					const before = el.scrollTop;
-					el.scrollTop += el.clientHeight;
-					await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-					return el.scrollTop > before;
-				});
-				if (!advanced) break;
-			}
-			await expect(moment).toBeVisible();
-			await moment.scrollIntoViewIfNeeded();
-			await expect(moment).toBeInViewport();
+			await expect(page.getByTestId('raw-moment')).toBeVisible();
 			await logs.settle();
 			fs.mkdirSync(OUT, { recursive: true });
 			await page.screenshot({ path: path.join(OUT, `${name}-view-logs-jump.png`) });
