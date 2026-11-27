@@ -38,9 +38,25 @@ mark and recirculates out the WAN.
 
 **Marks are physical-identity keyed.** The high byte `0xca` proves client-zone
 provenance, the next 16 bits select the uplink, and the low byte is preserved.
-The fixed 10000-bucket verdict map uses largest-remainder apportionment. Reorder,
-add/remove, and reweight never change a surviving mark, so established flows keep
-their original route while only new flows see the new weights.
+The fixed 10000-bucket verdict map uses largest-remainder apportionment. The
+coordinator supplies its successfully applied uplinks to the builder: a surviving
+identity always keeps its applied mark when links join or leave. Departing marks
+remain reserved during the transition until their old flows are retired. Only
+newcomers probe upward to a free slot, wrapping from 65535 to 1 and never using 0.
+Without applied history, natural slots are reserved in identity order before
+probing; the same identity set produces the same cold-start assignment across
+input order and fresh processes. Non-colliding marks remain unchanged. The
+shaping consumer uses the same applied ownership when reading desired marks.
+
+**A backend restart adopts live kernel ownership before route planning.** Once
+readiness is satisfied, the builder inventories the existing priority-110 mark
+rules and their table interfaces. Matching current interfaces retain those marks;
+disappeared interfaces keep their marks reserved until the applier retires their
+old support and conntrack entries. A restart therefore preserves a warm collision
+assignment, including duplicate-address modems, rather than swapping ownership
+through a new cold allocation. With no live kernel ownership, allocation remains
+the deterministic cold-start rule above. Custom builder compositions supply
+`discoverRoutes` from the same route inventory used by their applier.
 
 Wi-Fi marks use the coherently sampled permanent address bound to the current
 registry object, independently of its verified/limited classification key.
@@ -128,8 +144,10 @@ clears the backoff. On process restart,
 priority-100 managed-table source rules, including source-only crash remnants.
 It publishes the latest model first, then flushes and removes stale support.
 `uplink-steering/applier.ts` protects desired support by mark/table and retains
-cleanup work separately for each source address and priority. Any overlap, mark
-collision, foreign priority owner, missing route, nft failure, or rollback failure is fail-soft and surfaces
+cleanup work separately for each source address and priority. Hash-slot
+collisions are resolved with an info log naming both interfaces; the
+distinct-mark assertion and `mark_collision` refusal remain as invariants. Any
+overlap, foreign priority owner, missing route, nft failure, or rollback failure is fail-soft and surfaces
 `steering_unavailable`; it never blocks the already-bound WS server.
 
 Keep committed steering through stale-route cleanup failures: sharing, provisioned

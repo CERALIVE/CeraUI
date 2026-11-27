@@ -98,6 +98,7 @@ function steering() {
 			isBondCandidate: (name, entry) =>
 				name !== CLIENT && isBondCandidate(name, entry),
 			isClientZone: (name) => name === CLIENT,
+			discoverRoutes: async () => [],
 			planRoute: async (candidate) => ({
 				...candidate,
 				table: "30001",

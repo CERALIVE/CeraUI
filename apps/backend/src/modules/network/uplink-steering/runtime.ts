@@ -12,6 +12,7 @@ import {
 	setIpForwarding,
 } from "../uplink-sharing.ts";
 import { UplinkSteeringApplier } from "./applier.ts";
+import type { SteeringUplink } from "./contracts.ts";
 import { UplinkSteeringCoordinator } from "./coordinator.ts";
 import {
 	discoverOwnedUplinkRoutes,
@@ -67,6 +68,10 @@ export async function initUplinkSteering(): Promise<void> {
 
 export function requestUplinkSteeringReconcile(): Promise<void> {
 	return coordinator.requestReconcile();
+}
+
+export function getAppliedSteeringUplinks(): readonly SteeringUplink[] {
+	return coordinator.appliedState()?.uplinks ?? [];
 }
 
 export function stopUplinkSteeringForTest(): void {
