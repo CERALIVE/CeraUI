@@ -360,10 +360,12 @@ a frontend warning band/toast in `HudBar.svelte` when the level crosses
 Named Follow-ups below).
 
 ### `engine-schema-skew`
-**Current indicator:** `apps/backend/src/modules/streaming/capabilities.ts:361-375,392-400`
+**Current indicator:** `getCapabilities` in `apps/backend/src/modules/streaming/capabilities.ts`
 compares the engine's reported `schema_version` against the binding's expected
-version, logs a warning, and sets a `schemaVersionMismatch` flag;
-`apps/frontend/src/lib/streaming/go-live-readiness.ts:270-295` surfaces it as an
+version and sets a `schemaVersionMismatch` flag. The skew warning is logged
+once per engine connection (`modules/streaming/engine-schema-skew.ts`, shared
+with the startup and liveness probes), not on every read.
+`apps/frontend/src/lib/streaming/go-live-readiness.ts` surfaces the flag as an
 advisory (non-blocking) readiness warning.
 **Status: EXISTS**
 

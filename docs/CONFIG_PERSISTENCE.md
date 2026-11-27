@@ -281,7 +281,7 @@ they used the non-atomic `writeTextFile` (plain `Bun.write`).
 |------|--------|-----------|----------------------|
 | `dns_cache.json` | `dnsCacheValidate` (`modules/network/dns.ts:230`) | Atomic (`writeTextFileAtomic`) | `loadCacheFile` returns an empty cache on missing/invalid JSON — never throws. |
 | `gsm_operator_cache.json` | `writeGsmOperatorsCache` (`modules/modems/gsm-operators-cache.ts:36`) | Atomic (`writeTextFileAtomic`) | Same tolerant `loadCacheFile` path. |
-| `relays_cache.json` | `updateCachedRelays` (`modules/remote/remote-relays.ts:153`) | Atomic (`writeTextFileAtomic`) | Same tolerant `loadCacheFile` path. |
+| `relays_cache.json` | `updateCachedRelays` (`modules/remote/remote-relays.ts:153`) | Atomic (`writeTextFileAtomic`) | Loaded with `loadJsonConfig`. A missing file is normal until the first relay list arrives and logs at info (`missingFileLevel: "info"`). Invalid JSON warns and uses defaults; a schema error warns, keeps the valid fields and defaults the invalid ones. |
 
 (`relays_cache.json` has one writer function; the table lists it once, not
 per-call-site.)

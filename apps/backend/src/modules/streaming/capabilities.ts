@@ -56,6 +56,11 @@ import {
 	isEngineControlLoss,
 	reportEngineControlLoss,
 } from "./engine-control-loss.ts";
+import {
+	engineSchemaGeneration,
+	forgetEngineSchemaSkew,
+	observeEngineSchema,
+} from "./engine-schema-skew.ts";
 
 /**
  * The capability snapshot the UI consumes. It is the engine's
@@ -91,6 +96,8 @@ export type CapabilitiesResult = Omit<
 export interface EngineCapabilitiesSnapshot {
 	caps: GetCapabilitiesResult;
 	schemaVersion: string;
+	/** The engine release from the same hello, for the schema skew log. */
+	engineVersion?: string;
 	/** Relay transports advertised by the engine (additive; "srtla" implied). */
 	transports?: string[];
 	/** Embedded network-ingest audio capability (additive; read before the strip). */
@@ -147,6 +154,7 @@ export function beginCapabilitiesEpoch(): void {
 /** Retain display data while revoking evidence from a retired engine connection. */
 export function invalidateCapabilities(): void {
 	beginCapabilitiesEpoch();
+	forgetEngineSchemaSkew();
 	if (lastCapabilities !== undefined)
 		lastCapabilities = { ...lastCapabilities, engineUnavailable: true };
 }
@@ -234,9 +242,11 @@ async function defaultFetchEngineCapabilities(
 			.network_embedded_audio;
 		const network_embedded_audio =
 			typeof rawEmbeddedAudio === "boolean" ? rawEmbeddedAudio : undefined;
+		const engineVersion = client.hello.engine_version;
 		return {
 			caps,
 			schemaVersion,
+			...(engineVersion !== undefined ? { engineVersion } : {}),
 			...(transports !== undefined ? { transports } : {}),
 			...(network_embedded_audio !== undefined
 				? { network_embedded_audio }
@@ -396,6 +406,7 @@ let lastKnownGood: GetCapabilitiesResult | undefined;
 /** Drop the cached snapshot. Test seam + a hook for an engine-incompatible boot. */
 export function clearCapabilitiesCache(): void {
 	capabilityEpoch += 1;
+	forgetEngineSchemaSkew();
 	acceptedCapabilityEpoch = undefined;
 	lastKnownGood = undefined;
 	lastTransports = [...BASE_TRANSPORTS];
@@ -449,23 +460,31 @@ export async function getCapabilities(
 ): Promise<CapabilitiesResult> {
 	const deps: CapabilitiesServiceDeps = { ...defaultDeps(), ...overrides };
 	const epoch = capabilityEpoch;
+	const skewGeneration = engineSchemaGeneration();
 
 	try {
 		const {
 			caps: rawCaps,
 			schemaVersion,
+			engineVersion,
 			transports,
 			network_embedded_audio: networkEmbeddedAudio,
 		} = await deps.fetchEngineCapabilities();
+		// Additive-only within the protocol major (ADR-0002): warn + flag, but
+		// still serve: degrade, never crash, on version skew.
 		const mismatch = schemaVersion !== deps.bindingsSchemaVersion;
-		if (mismatch) {
-			// Additive-only within the protocol major (ADR-0002): warn + flag, but
-			// still serve — degrading, never crashing, on version skew.
-			deps.logger.warn(
-				"capabilities: engine schema_version differs from bindings; degrading (additive-only, informational)",
-				{ engine: schemaVersion, bindings: deps.bindingsSchemaVersion },
-			);
-		}
+		// Report the schema now, in the order the engine answered, not after the
+		// device scan below; the generation ignores a read whose connection was
+		// retired meanwhile.
+		observeEngineSchema(
+			deps.logger,
+			{
+				engine: schemaVersion,
+				bindings: deps.bindingsSchemaVersion,
+				...(engineVersion !== undefined ? { engineVersion } : {}),
+			},
+			skewGeneration,
+		);
 		// Speak kbps everywhere downstream: the engine may report the bitrate range
 		// in bps, so normalize it once here — the single unit-conversion seam.
 		const caps: GetCapabilitiesResult = {
@@ -497,6 +516,9 @@ export async function getCapabilities(
 		return lastCapabilities;
 	} catch (err) {
 		if (!current() || epoch !== capabilityEpoch) return retainedCapabilities();
+		// A lost engine connection re-arms the skew warning; a timeout or an
+		// engine error is not proof the connection is gone.
+		if (isEngineControlLoss(err)) forgetEngineSchemaSkew(skewGeneration);
 		if (lastKnownGood) {
 			deps.logger.warn(
 				"capabilities: engine unavailable; serving last-known-good snapshot",
