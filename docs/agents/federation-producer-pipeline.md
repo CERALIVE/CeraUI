@@ -25,9 +25,18 @@ that omits it gets the base locale exactly as before. Each entry also calls
 `registerFederationMessages()` (`lib/federation/messages.ts`) at module scope —
 the SPA resolves its message catalog from lazily-imported per-namespace chunks,
 whereas federation registers the catalog statically via `@ceraui/i18n/eager`.
-`vite.i18n.ts` shares argument-free literal dispatch by rewriting only the
-production SPA bundle. Paraglide's generated source and catalog import graph
-stay unchanged.
+`vite.i18n.ts` shares locale dispatch only in the production SPA bundle. It
+compacts argument-free literals and the pinned single-input template shape:
+every locale branch and the fallback must interpolate the same optional named
+property exactly once. Text before and after it is stored separately in locale
+order, including in RTL locales, and the shared renderer uses native JavaScript
+interpolation. Static locale still wins over explicit locale, then runtime
+locale; a missing locale entry uses the original fallback. Unknown module
+shapes, selectors, additional expressions, and unrecognized escapes are left to
+the normal loader. The compactor test executes the built ESM against the pinned
+unoptimized catalog, checks the transformed modules' exports and values, and
+verifies that development and federation do not register the plugin. Generated
+source, lazy namespace imports, and precache membership are unchanged.
 Federation uses an isolated Paraglide `locale-modules` output and full output
 minification; its message imports and locale-runtime shim resolve together through
 `vite.federation-i18n.ts`. The namespaces the dialogs render, in every locale,
