@@ -513,24 +513,27 @@ test.each([
 	},
 );
 
-test("an older engine's params.invalid cannot prove when it rejected a request with custom geometry", async () => {
-	const h = harness("0.22.0");
-	h.loseStartReply(
-		new CerastreamRpcError(
-			numeric[invalid],
-			"failed after Starting",
-			invalid,
-			1,
-		),
-	);
-	expect(
-		await h.start({
-			composition: { layout: "custom", secondary_input_id: "second-camera" },
-		}),
-	).toMatchObject({ result: "failed" });
-	expect(engineCalls(h, "stop")).toHaveLength(1);
-	expect(h.view()).toMatchObject({ engine: "idle", state: "idle" });
-});
+test.each(["0.22.0", "0.27.1"])(
+	"schema %s params.invalid cannot prove when it rejected a request with custom geometry",
+	async (schemaVersion) => {
+		const h = harness(schemaVersion);
+		h.loseStartReply(
+			new CerastreamRpcError(
+				numeric[invalid],
+				"failed after Starting",
+				invalid,
+				1,
+			),
+		);
+		expect(
+			await h.start({
+				composition: { layout: "custom", secondary_input_id: "second-camera" },
+			}),
+		).toMatchObject({ result: "failed" });
+		expect(engineCalls(h, "stop")).toHaveLength(1);
+		expect(h.view()).toMatchObject({ engine: "idle", state: "idle" });
+	},
+);
 
 test("a geometry number that can round at the producer is not proof of a pre-admission refusal", async () => {
 	const h = harness(SCHEMA_VERSION);

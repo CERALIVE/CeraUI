@@ -695,11 +695,11 @@ original entry; any repair/restore error warns without failing configure. See
 [retention and mount limits](docs/BUILD_PIPELINE.md#frontend-link-repair-exists-host-tested-board-proof-owed).
 To check a device: `readlink /opt/ceralive/public` must print `/var/www/ceralive`.
 
-CeraUI pins the published `@ceralive/cerastream@2026.11.4` in both
-the backend and shared RPC package. It adds the opt-in status snapshot on
-subscribe (2026.11.4) and attempt-scoped Start and Cancel (2026.11.3) to
-schema 0.23.0's optional
-`encoder.default_codec` and `active_encode.route_reason` alongside capture status,
+CeraUI pins the published `@ceralive/cerastream@2026.11.5` (schema `0.27.0`) in
+both the backend and shared RPC package. The bindings include the opt-in status
+snapshot on subscribe (2026.11.4), attempt-scoped Start and Cancel (2026.11.3),
+and schema 0.23.0's optional `encoder.default_codec` and
+`active_encode.route_reason` alongside capture status,
 failover-rate policy, raw-input classifications, and source-mode session-switch fields.
 Optional `audio_mix` capabilities and per-input audio levels now survive the RPC
 boundary. The mock models audio mix admission, live controls and free composition

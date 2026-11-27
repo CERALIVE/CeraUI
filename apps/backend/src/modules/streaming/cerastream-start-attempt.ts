@@ -71,7 +71,8 @@ export function startRefusedBeforeAdmission(
 	if (
 		schemaVersion !== "0.24.0" &&
 		schemaVersion !== "0.25.0" &&
-		schemaVersion !== "0.26.0"
+		schemaVersion !== "0.26.0" &&
+		schemaVersion !== "0.27.0"
 	)
 		return false;
 	const composition = params.composition;

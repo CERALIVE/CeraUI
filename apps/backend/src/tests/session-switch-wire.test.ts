@@ -54,9 +54,9 @@ test("both consumer packages resolve the exact installed registry version inside
 		const manifest = await Bun.file(
 			join(dirname(entry), "../package.json"),
 		).json();
-		expect(manifest.version).toBe("2026.11.4");
+		expect(manifest.version).toBe("2026.11.5");
 	}
-	expect(SCHEMA_VERSION).toBe("0.26.0");
+	expect(SCHEMA_VERSION).toBe("0.27.0");
 });
 
 test("the registry client sends list-switch-targets and switch-input over real NDJSON/UDS", async () => {
