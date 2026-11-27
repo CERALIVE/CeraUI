@@ -531,7 +531,8 @@ Rules for this copy:
 | `systemLogs.raw.timeLast24h` | Last 24 hours | Time option |
 | `systemLogs.raw.timeAll` | All stored | Time option |
 | `systemLogs.raw.timeBoot` | Selected boot | Time select when the boot picker chose a boot, and in anchor mode |
-| `systemLogs.raw.searchLabel` | Search messages | Search input accessible name, and its placeholder while the filters are inline |
+| `systemLogs.raw.searchLabel` | Search messages | Export summary label for the message filter |
+| `systemLogs.raw.searchInputLabel` | Search logs by message | Stable search input accessible name, and its placeholder while the filters are inline |
 | `systemLogs.raw.searchShort` | Search logs | Search placeholder while the filters are folded |
 | `systemLogs.raw.searchClear` | Clear search | Search clear button |
 | `systemLogs.raw.orderLabel` | Order | Order control label |
@@ -1014,7 +1015,8 @@ widths are not measured in this lane.
   (`tests/e2e/helpers/system-logs-audit.ts`, spacing check).
 - Folded Raw bar: while the Filters button shows, Search uses the short
   placeholder (`systemLogs.raw.searchShort`) and keeps the full label as its
-  accessible name; with the filters inline the full label is the placeholder
+  accessible name. The full label includes the short text in each locale.
+  With the filters inline the full label is the placeholder
   (`RawLogsFilterBar.svelte`).
 - Short Raw view (below 1024 px wide and at most 480 px tall, or below 640 px
   wide and at most 600 px tall): the filter and notice area has a bounded

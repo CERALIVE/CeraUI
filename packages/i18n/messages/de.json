@@ -3141,6 +3141,7 @@
 	"systemLogs.raw.timeAll": "Alles Gespeicherte",
 	"systemLogs.raw.timeBoot": "Ausgewählter Systemstart",
 	"systemLogs.raw.searchLabel": "Meldungen durchsuchen",
+	"systemLogs.raw.searchInputLabel": "Suchen in Logmeldungen",
 	"systemLogs.raw.searchShort": "Suchen",
 	"systemLogs.raw.searchClear": "Suche löschen",
 	"systemLogs.raw.orderLabel": "Reihenfolge",

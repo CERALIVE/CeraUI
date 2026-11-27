@@ -2921,6 +2921,7 @@
 	"systemLogs.raw.timeAll": "全部已保存",
 	"systemLogs.raw.timeBoot": "所选启动",
 	"systemLogs.raw.searchLabel": "搜索消息",
+	"systemLogs.raw.searchInputLabel": "搜索日志消息",
 	"systemLogs.raw.searchShort": "搜索日志",
 	"systemLogs.raw.searchClear": "清除搜索",
 	"systemLogs.raw.orderLabel": "排序",

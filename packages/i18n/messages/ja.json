@@ -2921,6 +2921,7 @@
 	"systemLogs.raw.timeAll": "保存済みのすべて",
 	"systemLogs.raw.timeBoot": "選択した起動",
 	"systemLogs.raw.searchLabel": "メッセージを検索",
+	"systemLogs.raw.searchInputLabel": "ログを検索（本文）",
 	"systemLogs.raw.searchShort": "ログを検索",
 	"systemLogs.raw.searchClear": "検索をクリア",
 	"systemLogs.raw.orderLabel": "並び順",

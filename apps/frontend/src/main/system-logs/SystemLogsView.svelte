@@ -247,7 +247,8 @@ $effect(() => {
 				</div>
 				{#each tabs as tab (tab)}
 					<!-- Tab goes from the tabs straight to the panel's controls; the panel itself is no stop. -->
-					<Tabs.Content class={tab === 'raw' ? 'min-h-0 overflow-y-auto short-logs:min-h-[calc(5.5rem+var(--raw-controls-max))] short-logs:overflow-visible' : 'min-h-0 overflow-y-auto'} data-testid="system-logs-panel-{tab}" tabindex={-1} value={tab}>
+					<!-- Keep the Storage touch gap outside the scrollport so it cannot scroll away. -->
+					<Tabs.Content class="min-h-0 overflow-y-auto {tab === 'raw' ? 'short-logs:min-h-[calc(5.5rem+var(--raw-controls-max))] short-logs:overflow-visible' : tab === 'storage' ? 'mt-2' : ''}" data-testid="system-logs-panel-{tab}" tabindex={-1} value={tab}>
 						{#if tab === 'events' && current === 'events'}
 							<EventsPanel onviewraw={(page) => { around = page; linkStill = bootSelection.since(); selected = 'raw'; }} />
 						{/if}

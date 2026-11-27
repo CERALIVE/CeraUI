@@ -3156,6 +3156,7 @@
 	"systemLogs.raw.timeAll": "Tudo o que está armazenado",
 	"systemLogs.raw.timeBoot": "Inicialização selecionada",
 	"systemLogs.raw.searchLabel": "Pesquisar mensagens",
+	"systemLogs.raw.searchInputLabel": "Buscar nas mensagens dos logs",
 	"systemLogs.raw.searchShort": "Buscar",
 	"systemLogs.raw.searchClear": "Limpar pesquisa",
 	"systemLogs.raw.orderLabel": "Ordem",

@@ -461,6 +461,9 @@ for (const locale of ALL_LOCALES) {
 		}
 		expect(measured.filter((entry) => entry.width > entry.room + 0.5)).toEqual([]);
 		expect(new Set(measured.map((entry) => entry.name)).size).toBe(1);
+		for (const entry of measured) {
+			expect(entry.name, entry.size).toContain(entry.placeholder);
+		}
 		// The wide layout has room for the full label, so it stays the placeholder there.
 		for (const viewport of ['1280x800', '1440x900']) {
 			const wide = measured.find((entry) => entry.size === viewport);

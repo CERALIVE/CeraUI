@@ -3141,6 +3141,7 @@
 	"systemLogs.raw.timeAll": "सब सहेजा हुआ",
 	"systemLogs.raw.timeBoot": "चुना गया बूट",
 	"systemLogs.raw.searchLabel": "संदेशों में खोजें",
+	"systemLogs.raw.searchInputLabel": "लॉग खोजें (संदेश के आधार पर)",
 	"systemLogs.raw.searchShort": "लॉग खोजें",
 	"systemLogs.raw.searchClear": "खोज साफ़ करें",
 	"systemLogs.raw.orderLabel": "क्रम",

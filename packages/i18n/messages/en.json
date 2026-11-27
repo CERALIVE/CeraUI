@@ -3141,6 +3141,7 @@
 	"systemLogs.raw.timeAll": "All stored",
 	"systemLogs.raw.timeBoot": "Selected boot",
 	"systemLogs.raw.searchLabel": "Search messages",
+	"systemLogs.raw.searchInputLabel": "Search logs by message",
 	"systemLogs.raw.searchShort": "Search logs",
 	"systemLogs.raw.searchClear": "Clear search",
 	"systemLogs.raw.orderLabel": "Order",

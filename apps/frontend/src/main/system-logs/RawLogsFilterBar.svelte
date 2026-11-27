@@ -5,7 +5,7 @@
   and fold behind a Filters button otherwise (the 1024x600 kiosk, phones). The
   fold is a container query on this bar, so the 320 px side column counts.
   While folded, Search shares its row with Filters and Follow, so its
-  placeholder and accessible name both use the short form.
+  placeholder uses the short form, which is included in the stable full name.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
@@ -30,7 +30,7 @@ let open = $state(false);
 let filtersToggle = $state<HTMLElement | null>(null);
 // The Filters button renders only while the container query folds the filters.
 let compact = $state(false);
-const searchLabel = $derived(compact ? m['systemLogs.raw.searchShort']() : m['systemLogs.raw.searchLabel']());
+const searchLabel = $derived(m['systemLogs.raw.searchInputLabel']());
 
 // Absent ResizeObserver (jsdom) keeps the full placeholder.
 $effect(() => {
@@ -91,7 +91,7 @@ function chooseTime(value: string): void {
 				onkeydown={(event) => {
 					if (event.key === 'Enter') void view.applyDraft();
 				}}
-				placeholder={searchLabel}
+				placeholder={compact ? m['systemLogs.raw.searchShort']() : searchLabel}
 				value={view.draft}
 			/>
 			{#if view.draft !== ''}

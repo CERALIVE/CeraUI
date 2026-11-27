@@ -3201,6 +3201,7 @@
 	"systemLogs.raw.timeAll": "كل ما هو محفوظ",
 	"systemLogs.raw.timeBoot": "الإقلاع المحدد",
 	"systemLogs.raw.searchLabel": "البحث في الرسائل",
+	"systemLogs.raw.searchInputLabel": "بحث في رسائل السجل",
 	"systemLogs.raw.searchShort": "بحث",
 	"systemLogs.raw.searchClear": "مسح البحث",
 	"systemLogs.raw.orderLabel": "الترتيب",
