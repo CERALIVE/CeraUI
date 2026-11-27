@@ -1122,6 +1122,8 @@
 	"network.modem.autoApnDescription": "자동으로 APN 구성",
 	"network.modem.autoApnRecommended": "권장",
 	"network.modem.autoApnUnsupported": "이 기기는 APN을 자동으로 설정할 수 없습니다. 아래에서 직접 입력하세요.",
+	"network.modem.apnFromProviderDatabase": "이동통신사 데이터베이스가 이 SIM의 네트워크에 대해 제시하는 APN입니다. 모바일 데이터가 연결되지 않으면 통신사의 APN을 입력하세요.",
+	"network.modem.apnNotListed": "이동통신사 데이터베이스에 이 SIM의 네트워크용 인터넷 APN이 없습니다. 모바일 데이터가 연결되지 않으면 자동 APN을 끄고 통신사의 APN을 입력하세요.",
 	"network.modem.autoapn": "자동 APN",
 	"network.modem.automaticRoamingNetwork": "자동 선택",
 	"network.modem.availableNetworks": "사용 가능한 네트워크",

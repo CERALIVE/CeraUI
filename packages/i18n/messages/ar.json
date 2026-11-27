@@ -1269,6 +1269,8 @@
 	"network.modem.autoApnDescription": "تكوين APN تلقائياً",
 	"network.modem.autoApnRecommended": "موصى به",
 	"network.modem.autoApnUnsupported": "لا يمكن لهذا الجهاز ضبط APN تلقائيًا. أدخله يدويًا أدناه.",
+	"network.modem.apnFromProviderDatabase": "هذا هو APN الذي تذكره قاعدة بيانات مزودي الاتصالات لشبكة شريحة SIM هذه. إذا لم تتصل بيانات الجوال، أدخل APN الخاص بمزودك.",
+	"network.modem.apnNotListed": "لا تذكر قاعدة بيانات مزودي الاتصالات أي APN للإنترنت لشبكة شريحة SIM هذه. إذا لم تتصل بيانات الجوال، أوقف APN التلقائي وأدخل APN الخاص بمزودك.",
 	"network.modem.autoapn": "APN تلقائي",
 	"network.modem.automaticRoamingNetwork": "اختيار تلقائي",
 	"network.modem.availableNetworks": "الشبكات المتاحة",

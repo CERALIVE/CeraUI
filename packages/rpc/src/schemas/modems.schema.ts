@@ -68,6 +68,12 @@ export const modemConfigSchema = z.object({
 	// then silently discard. ABSENT = a backend that predates the field: the
 	// switch stays offered, exactly as before.
 	autoconfig_supported: z.boolean().optional(),
+	// Where the APN came from, so the dialog can say it was chosen for the
+	// operator to check. `provider-database`: the APN listed for the SIM's own
+	// network, written because Automatic APN would have picked a different one.
+	// `not-listed`: Automatic APN is on, but the database lists nothing for the
+	// SIM's own network. ABSENT = nothing to say (or an older backend).
+	apn_source: z.enum(['provider-database', 'not-listed']).optional(),
 });
 export type ModemConfig = z.infer<typeof modemConfigSchema>;
 

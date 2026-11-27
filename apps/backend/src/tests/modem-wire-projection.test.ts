@@ -165,6 +165,41 @@ describe("modem wire projection — legacy byte-compat (mmcli path)", () => {
 		expect(JSON.stringify(entry)).toBe(JSON.stringify(legacy["7"]));
 	});
 
+	test("a config carrying an APN hint stays byte-identical, apn_source included", () => {
+		setup.has_gsm_autoconfig = true;
+		const base = buildModemFixture();
+		if (base.config === undefined) throw new Error("fixture has no config");
+		const modem = buildModemFixture({
+			config: {
+				...base.config,
+				autoconfig: false,
+				apn: "web",
+				username: "",
+				password: "",
+				apn_hint: {
+					source: "provider-database",
+					homeNetwork: "23217",
+					apn: "web",
+					username: "",
+					password: "",
+				},
+			},
+		});
+		setModem(7, modem);
+
+		const legacy = buildModemsMessage();
+		const projected = projectModemWire(
+			[fromMmcliModem(7, modem, { idPath: MM_NET_INTERFACE_PATH })],
+			{ hasGsmAutoconfig: true },
+		);
+
+		const entry: WireModemEntry = { ...projected.message["7"] };
+		delete entry.stable_key;
+		delete entry.port_label;
+		expect(entry.config?.apn_source).toBe("provider-database");
+		expect(JSON.stringify(entry)).toBe(JSON.stringify(legacy["7"]));
+	});
+
 	test("a status-only partial is byte-identical to the live builder", () => {
 		const modem = buildModemFixture();
 		setModem(3, modem);

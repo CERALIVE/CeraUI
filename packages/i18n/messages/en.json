@@ -1237,6 +1237,8 @@
 	"network.modem.autoApnDescription": "Automatically configure APN settings",
 	"network.modem.autoApnRecommended": "Recommended",
 	"network.modem.autoApnUnsupported": "This device cannot configure the APN automatically. Enter it manually below.",
+	"network.modem.apnFromProviderDatabase": "This is the APN the mobile provider database lists for this SIM's network. If mobile data does not connect, enter the APN from your provider.",
+	"network.modem.apnNotListed": "The mobile provider database lists no internet APN for this SIM's network. If mobile data does not connect, turn off Automatic APN and enter the APN from your provider.",
 	"network.modem.autoapn": "Automatic APN",
 	"network.modem.automaticRoamingNetwork": "Automatic Selection",
 	"network.modem.availableNetworks": "Available Networks",

@@ -192,6 +192,9 @@ export function fromMmcliModem(
 			roaming: modem.config.roaming,
 			network: modem.config.network,
 			autoconfig: modem.config.autoconfig,
+			...(modem.config.apn_hint !== undefined
+				? { apn_hint: modem.config.apn_hint }
+				: {}),
 		};
 	}
 	if (modem.sim_presence !== undefined) {

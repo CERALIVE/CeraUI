@@ -444,6 +444,16 @@ const primaryDisabled = $derived(noSim || apnError || thresholdInvalid);
 // stays offered exactly as before.
 const autoApnUnsupported = $derived(modem.config?.autoconfig_supported === false);
 
+// Where the stored APN came from (backend `provider-apn.ts`). Each note shows
+// only while the form still matches what the backend described, so editing the
+// APN or flipping the switch hides it instead of leaving a stale claim.
+const apnFromProviderDatabase = $derived(
+	modem.config?.apn_source === 'provider-database' &&
+		!formData.autoconfig &&
+		formData.apn === modem.config.apn,
+);
+const apnNotListed = $derived(modem.config?.apn_source === 'not-listed' && formData.autoconfig);
+
 // Which connect-time values the pending edit would change, by the SAME rule the
 // device applies (`@ceraui/rpc`) — a second copy here would let the dialog
 // promise no interruption while the device causes one.
@@ -1704,10 +1714,20 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 								{m["network.modem.autoApnUnsupported"]()}
 							</p>
 						{/if}
+						{#if apnNotListed}
+							<p
+								id="modem-apn-not-listed"
+								class="text-muted-foreground mt-1 text-xs"
+								data-testid="modem-apn-not-listed"
+							>
+								{m["network.modem.apnNotListed"]()}
+							</p>
+						{/if}
 					</div>
 				</div>
 				<LabeledSwitch
 					checked={formData.autoconfig}
+					describedBy={apnNotListed ? 'modem-apn-not-listed' : undefined}
 					disabled={noSim || autoApnUnsupported}
 					label={m["network.modem.autoapn"]()}
 					onCheckedChange={(checked) => (formData.autoconfig = checked)}
@@ -1724,6 +1744,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 						</Label>
 						<Input
 							id="modem-apn"
+							aria-describedby={apnFromProviderDatabase ? 'modem-apn-from-provider-database' : undefined}
 							aria-invalid={apnError}
 							class={cn('h-10 text-sm', apnError && 'border-status-error focus-visible:ring-status-error')}
 						disabled={noSim}
@@ -1732,6 +1753,15 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 						/>
 						{#if apnError}
 							<p class="text-status-error text-xs">{m["network.modem.apnRequired"]()}</p>
+						{/if}
+						{#if apnFromProviderDatabase}
+							<p
+								id="modem-apn-from-provider-database"
+								class="text-muted-foreground text-xs"
+								data-testid="modem-apn-from-provider-database"
+							>
+								{m["network.modem.apnFromProviderDatabase"]()}
+							</p>
 						{/if}
 					</div>
 

@@ -409,6 +409,7 @@ fpm -s dir -t deb \
     --depends "debian-archive-keyring" \
     --depends "network-manager" \
     --depends "modemmanager" \
+    --depends "mobile-broadband-provider-info" \
     --depends "cerastream" \
     --depends "$IPC_VPKG" \
     --conflicts "belaui" \
@@ -459,6 +460,7 @@ cat > "dist/debian/package-info-${ARCHITECTURE}.json" << EOF
     "debian-archive-keyring",
     "network-manager",
     "modemmanager",
+    "mobile-broadband-provider-info",
     "cerastream",
     "$IPC_VPKG"
   ],

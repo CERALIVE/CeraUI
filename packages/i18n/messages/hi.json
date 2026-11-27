@@ -1237,6 +1237,8 @@
 	"network.modem.autoApnDescription": "APN स्वचालित रूप से कॉन्फ़िगर करें",
 	"network.modem.autoApnRecommended": "अनुशंसित",
 	"network.modem.autoApnUnsupported": "यह डिवाइस APN को स्वचालित रूप से कॉन्फ़िगर नहीं कर सकता। इसे नीचे मैन्युअल रूप से दर्ज करें।",
+	"network.modem.apnFromProviderDatabase": "यह वह APN है जो मोबाइल प्रदाता डेटाबेस इस SIM के नेटवर्क के लिए बताता है। अगर मोबाइल डेटा कनेक्ट नहीं होता, तो अपने प्रदाता का APN दर्ज करें।",
+	"network.modem.apnNotListed": "मोबाइल प्रदाता डेटाबेस में इस SIM के नेटवर्क के लिए कोई इंटरनेट APN नहीं है। अगर मोबाइल डेटा कनेक्ट नहीं होता, तो स्वचालित APN बंद करें और अपने प्रदाता का APN दर्ज करें।",
 	"network.modem.autoapn": "स्वचालित APN",
 	"network.modem.automaticRoamingNetwork": "स्वचालित चयन",
 	"network.modem.availableNetworks": "उपलब्ध नेटवर्क",
