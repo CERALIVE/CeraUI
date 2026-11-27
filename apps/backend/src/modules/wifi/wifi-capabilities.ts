@@ -981,9 +981,10 @@ export async function refreshWifiCapabilities(
  */
 export function getWifiCapabilitiesForInterface(
 	ifname: string,
+	refresh = true,
 ): WifiAdapterCapabilities | undefined {
 	if (cache === undefined) return undefined;
-	if (isStale(cache, deps.now())) {
+	if (refresh && isStale(cache, deps.now())) {
 		void refreshWifiCapabilities(lastIfnames);
 	}
 	const phy = cache.byIfname.get(ifname);

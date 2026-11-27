@@ -212,6 +212,11 @@ export type HotspotProfilePins = readonly [
  * the real NetworkManager helpers; tests pass deterministic fakes. Monitor
  * events and positive poll hints still require selected-AP NM evidence.
  */
+export type HotspotStartPublication = {
+	publishOutcome?: HotspotOutcomePublisher;
+	onConfirmationSuperseded?: (() => void) | undefined;
+};
+
 export type HotspotActivationDeps = {
 	/** Present only for explicit user toggles; mode transitions and boot omit it. */
 	recordIntent?: WifiAdapterModeRecorder;

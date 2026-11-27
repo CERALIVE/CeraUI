@@ -56,7 +56,7 @@ interface Props {
 	iface: WifiInterface | undefined;
 	/** Pre-sorted networks to render (active → saved → signal). */
 	networks: AvailableWifiNetwork[];
-	/** Interface-level connect-in-flight guard. */
+	/** Interface-level station mutation guard. */
 	ifaceBusy: boolean;
 	/** Manual-scan spinner flag. */
 	scanning: boolean;
@@ -162,8 +162,6 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 			</span>
 			{#if scanning}
 				<InlineSpinner data-testid="wifi-scan-status" label={m["wifiSelector.button.scanning"]()} />
-			{:else if ifaceBusy}
-				<InlineSpinner label={m["wifiSelector.dialog.connecting"]()} />
 			{/if}
 			{#if freshnessKey}
 				<span
@@ -299,6 +297,7 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 							<Button
 								aria-label={`${m["network.os.retry"]()} ${network.ssid}`}
 								class="gap-1.5"
+								disabled={ifaceBusy}
 								onclick={() => (uuid ? onConnectSaved(uuid, network) : onConnectNew(network))}
 								size="sm"
 								variant="outline"
@@ -311,7 +310,7 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 						{:else if isForgetting}
 							<InlineSpinner size="md" label={m["network.os.applying"]()} />
 						{:else if confirming}
-							<Button onclick={() => managedUuid && onForget(managedUuid, network)} size="sm" variant="destructive">
+							<Button disabled={ifaceBusy} onclick={() => managedUuid && onForget(managedUuid, network)} size="sm" variant="destructive">
 								{m["wifiSelector.button.forget"]()}
 							</Button>
 							<Button onclick={() => onConfirmForget(undefined)} size="sm" variant="ghost">
@@ -322,7 +321,7 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 								<Button
 									aria-label={`${m["wifiSelector.button.disconnect"]()} ${network.ssid}`}
 									class="gap-1.5"
-									disabled={osBusy}
+									disabled={ifaceBusy || osBusy}
 									onclick={() => onDisconnect(activeUuid, network)}
 									size="sm"
 									variant="outline"
@@ -360,7 +359,7 @@ const superseded = $derived(wifiScanResultsSuperseded(scanState));
 							<Button
 								aria-label={`${m["wifiSelector.button.forget"]()} ${network.ssid}`}
 								class="text-muted-foreground hover:text-destructive size-9"
-								disabled={osBusy}
+								disabled={ifaceBusy || osBusy}
 								onclick={() => onConfirmForget(network.ssid)}
 								size="icon"
 								variant="ghost"

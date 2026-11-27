@@ -163,6 +163,26 @@ export async function withWifiConfigReceipt(
 	}
 }
 
+/** Observe every frame for one device, including transitions between renders. */
+export function observeWifiStatus(
+	device: string,
+	receive: (row: WifiInterface | undefined) => void,
+	signal: AbortSignal,
+): () => void {
+	const visit = (status: WifiStatus) => {
+		if (Object.hasOwn(status, device)) receive(status[device]);
+	};
+	const stop = () => {
+		waiters.delete(visit);
+		signal.removeEventListener("abort", stop);
+	};
+	if (!signal.aborted) {
+		waiters.add(visit);
+		signal.addEventListener("abort", stop, { once: true });
+	}
+	return stop;
+}
+
 /** Observe a future frame, including one whose row bytes have not changed. */
 export function waitForWifiStatus(
 	device: string,
@@ -171,16 +191,13 @@ export function waitForWifiStatus(
 	return new Promise((resolve) => {
 		const finish = (row?: WifiInterface) => {
 			clearTimeout(timer);
-			waiters.delete(receive);
+			stop();
 			signal.removeEventListener("abort", abort);
 			resolve(row);
 		};
-		const receive = (status: WifiStatus) => {
-			if (Object.hasOwn(status, device)) finish(status[device]);
-		};
 		const abort = () => finish();
 		const timer = setTimeout(abort, 3000);
-		waiters.add(receive);
+		const stop = observeWifiStatus(device, finish, signal);
 		signal.addEventListener("abort", abort, { once: true });
 		if (signal.aborted) abort();
 	});

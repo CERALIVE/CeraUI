@@ -36,3 +36,26 @@ for (const array of [false, true]) {
 		expect(local).toStrictEqual(original);
 	});
 }
+
+for (const array of [false, true]) {
+	test(`keeps the Wi-Fi status bytes unchanged with a local prior mode array=${array}`, () => {
+		const legacy = { observed_mode: "hotspot", mode: "hotspot", saved: {} };
+		const withToken = {
+			...legacy,
+			incarnation: "radio-token",
+			leaving: "station",
+		};
+		const noToken = { ...legacy, leaving: null };
+		const local = {
+			wifi: array ? [withToken, noToken] : { 0: withToken, 1: noToken },
+		};
+		const original = structuredClone(local);
+		const expected = {
+			wifi: array ? [legacy, legacy] : { 0: legacy, 1: legacy },
+		};
+		expect(JSON.stringify(projectRemoteStatus(local))).toBe(
+			JSON.stringify(expected),
+		);
+		expect(local).toStrictEqual(original);
+	});
+}

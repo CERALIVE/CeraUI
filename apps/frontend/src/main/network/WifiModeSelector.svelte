@@ -177,7 +177,7 @@ onDestroy(() => { session += 1; admission?.abort(); });
 const unavailable = $derived(view.options.filter((option) => !option.available));
 
 function openRetryGate(mode: WifiAdapterMode, disposition: 'first-consent' | 'reload' | 'unsupported') {
-	if (confirmation || consentBlocked) return;
+	if (confirmation || consentBlocked || lockedReason !== undefined) return;
 	focusRecoveredGate = shouldFocusRecoveredGate?.() === true;
 	if (disposition === 'unsupported') bindingUnsupported = true;
 	else reloaded = disposition === 'reload';
@@ -187,10 +187,12 @@ function openRetryGate(mode: WifiAdapterMode, disposition: 'first-consent' | 're
 
 async function apply(mode: WifiAdapterMode, incarnation = view.incarnation, answered = false) {
 	const original = capture();
-	if (incarnation !== original.incarnation ||
+	if (lockedReason !== undefined || incarnation !== original.incarnation ||
 		(mode !== 'station' && (!incarnation || view.degradedReason || consentBlocked))) return;
 	confirmation = undefined;
 	let replaced = false;
+	let crossedPeerTransition = false;
+	let observationMissing = false;
 	let firstConsentHandoff: (() => boolean) | undefined;
 	await osCommand({
 		key: wifiModeOpKey(original.device, incarnation),
@@ -223,16 +225,18 @@ async function apply(mode: WifiAdapterMode, incarnation = view.incarnation, answ
 					return false;
 				},
 				onReplacement: () => { replaced = handoff(key); },
+				onInterveningTransition: () => { crossedPeerTransition = true; },
 			});
-			if (!result && !controller.signal.aborted && owned()) openRetryGate(mode, 'unsupported');
+			observationMissing = !result && !controller.signal.aborted && owned();
 			return result ?? { success: false, error: 'binding-required' };
 		},
 		isCurrent: () => current(original) ? (firstConsentHandoff?.() ?? true)
 			: (replaced && admissionOwner === original &&
 			!admission?.signal.aborted && view.device === original.device && getLinkEpoch() === original.link),
 		onResult: (result) => {
-			if (mode !== 'station' && wifiRadioChanged(result)) {
-				openRetryGate(mode, firstConsentHandoff ? 'first-consent' : 'reload');
+			if (!crossedPeerTransition && mode !== 'station' && wifiRadioChanged(result)) {
+				// The host's pending lock included our own attempt until osCommand settled it.
+				openRetryGate(mode, observationMissing ? 'unsupported' : firstConsentHandoff ? 'first-consent' : 'reload');
 			}
 		},
 		// The reason renders inline beneath the control; a toast would say the
@@ -242,7 +246,7 @@ async function apply(mode: WifiAdapterMode, incarnation = view.incarnation, answ
 }
 
 function request(mode: WifiAdapterMode) {
-	if (mode === view.displayMode || (consentBlocked && mode !== 'station')) return;
+	if (lockedReason !== undefined || mode === view.displayMode || (consentBlocked && mode !== 'station')) return;
 	admission?.abort();
 	bindingUnsupported = false;
 	reloaded = false;
@@ -372,6 +376,7 @@ function request(mode: WifiAdapterMode) {
 			{session}
 			{reloaded}
 			focusOnOpen={focusRecoveredGate}
+			locked={lockedReason !== undefined}
 			keepsStation={gated === 'hybrid'}
 			onCancel={() => { admission?.abort(); session += 1; confirmation = undefined; }}
 			onConfirm={(incarnation) => gated && apply(gated, incarnation, true)}

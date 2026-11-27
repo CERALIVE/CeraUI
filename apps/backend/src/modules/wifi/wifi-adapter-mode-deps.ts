@@ -59,10 +59,14 @@ export const defaultAdapterModeDeps: AdapterModeTransitionDeps = {
 					: await startHotspotLocked(
 							found.macAddress,
 							found.wifiInterface,
-							{ ...deps, publishOutcome: publish },
-							undefined,
-							restoreAttempt,
-							binding ?? bindingForRow(found.macAddress, found.wifiInterface),
+							deps,
+							{
+								restoreAttempt,
+								binding:
+									binding ??
+									bindingForRow(found.macAddress, found.wifiInterface),
+								publication: { publishOutcome: publish },
+							},
 						);
 		if (!result.success) publish("start", device, result);
 		return result;

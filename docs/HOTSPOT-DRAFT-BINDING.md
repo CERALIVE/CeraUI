@@ -7,6 +7,19 @@ preserve typed details and the acknowledgement. A changed binding reloads the
 current stored values, clears consent and displays an inline notice. Every
 load advances a local attempt counter, so returning from A to B to A cannot
 revive A's old response.
+A transition lock is different from an ordinary same-binding status update.
+If the lock arrives while the credential prompt is open, the prompt remains
+readable but its acknowledgement and any in-flight credential confirmation
+retire. The settled row triggers a fresh credential read before the operator
+can confirm again. The old reply or observation retry cannot submit Start or
+an access-point mode change.
+A dispatched mutation that later returns `current-unobserved` does not resend
+if any status frame showed a transition on the same radio since dispatch.
+This covers Start, mode changes, and live Save. A live Save reloads the settled
+settings instead of writing a draft from before a peer's change. An editor
+opened or rebound during a transition shows the last reported settings
+read-only until a verified, settled row arrives. Brief token withholding does
+not revive a retired draft or authorize resending it. A replacement radio shows its own reported settings, never the previous radio's, and a Save terminal received while the token is withheld still settles that Save.
 
 Prepare/load/save, start, live configure and AP mode switches send the captured
 expected incarnation. Stop and station mode send it when present and remain

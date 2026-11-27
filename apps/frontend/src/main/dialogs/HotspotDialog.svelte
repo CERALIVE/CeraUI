@@ -80,7 +80,7 @@ import {
 } from '$main/network/wifi-adapter-mode-view';
 import { withWifiEntryRetry } from '$main/network/wifi-entry-request';
 import { sameWifiRadio, type WifiRadioBinding, wifiRadioChanged } from '$main/network/wifi-radio-binding';
-import { wifiHotspotConfigOpKey, wifiHotspotOpKey, wifiModeOpKey } from '$main/network/wifi-station-lock';
+import { deriveWifiStationLock, wifiHotspotConfigOpKey, wifiHotspotOpKey, wifiModeOpKey } from '$main/network/wifi-station-lock';
 
 import {
 	deriveHotspotRadioTruth,
@@ -112,6 +112,8 @@ let startRefused = $state<'radio-changed' | 'deactivation-failed'>();
 let bindingUnsupported = $state(false);
 let admission: AbortController | undefined;
 let admissionOwner: WifiRadioBinding | undefined;
+// A withheld token retires the draft session, not the same radio's Save receipt.
+let saveReceiptOwner: WifiRadioBinding | undefined;
 let configAdmissionKey = $state<string>();
 let startAdmission = $state.raw<{ readonly key: string; readonly controller: AbortController }>();
 
@@ -128,6 +130,7 @@ onDestroy(() => { ownerSession += 1; admission?.abort(); });
 function beginAdmission(binding: WifiRadioBinding): AbortController {
 	admission?.abort();
 	configAdmissionKey = undefined;
+	saveReceiptOwner = undefined;
 	admissionOwner = binding;
 	admission = new AbortController();
 	return admission;
@@ -159,7 +162,15 @@ const modeView = $derived(
 // configure uses a SEPARATE key so a save never collides with a start/stop.
 const toggleKey = $derived(wifiHotspotOpKey(deviceId, radioToken));
 const configKey = $derived(wifiHotspotConfigOpKey(deviceId, radioToken));
-const toggling = $derived(getOperationPhase(toggleKey) === 'pending');
+const togglePhase = $derived(getOperationPhase(toggleKey));
+const toggling = $derived(togglePhase === 'pending');
+const stationLock = $derived(deriveWifiStationLock({
+	hotspot: togglePhase,
+	mode: getOperationPhase(wifiModeOpKey(deviceId, radioToken)),
+	status: iface,
+}));
+const stationLockReason = $derived(stationLock.reasonKey === undefined
+	? undefined : resolveMessageKey(stationLock.reasonKey));
 const configuring = $derived(getOperationPhase(configKey) === 'pending');
 const configFailure = $derived(getOperationReason(configKey));
 const toggleFailure = $derived(getOperationReason(toggleKey));
@@ -193,7 +204,7 @@ const modeContext = $derived({
 });
 const modeOwnsConsent = $derived(Boolean(modeView && confirmingMode &&
 	(confirmingMode.kind === 'credentials' ||
-		actionableWifiModeConsequence(modeView, confirmingMode.mode, modeContext, toggling))));
+		actionableWifiModeConsequence(modeView, confirmingMode.mode, modeContext, stationLock.locked))));
 
 function enableHasFocus() {
 	return !isActive && toggleButton !== null && document.activeElement === toggleButton;
@@ -210,11 +221,12 @@ function reopenStartGate(unsupported = false) {
 	confirmingStart = true;
 }
 
-// ── Form state (synced once from props; user edits are never clobbered) ──
+// ── Form state (ordinary status updates do not overwrite edits) ──
 let name = $state('');
 let password = $state('');
 let channel = $state('auto');
 let showPassword = $state(false);
+let refreshFormOnSettlement = $state(false);
 // `undefined` until the one-time sync runs AND the device offers a real choice;
 // a save then omits `security` entirely, which the device reads as "leave the
 // adapter's current selection alone".
@@ -239,18 +251,25 @@ $effect.pre(() => {
 	const active = isActive;
 	const hasModeView = modeView !== undefined;
 	const next = { device: radioDevice, incarnation: radioToken, link: getLinkEpoch() };
-	radioReason;
+	const reason = radioReason;
+	const locked = stationLock.locked;
+	const refreshOnSettlement = refreshFormOnSettlement;
 	untrack(() => {
 		if (!opened || (admissionOwner &&
 			(admissionOwner.device !== next.device || admissionOwner.link !== next.link))) {
 			admission?.abort();
 			startRefused = undefined;
 		}
+		if (saveReceiptOwner && (!opened || saveReceiptOwner.device !== next.device ||
+			saveReceiptOwner.link !== next.link || (next.incarnation !== undefined &&
+			saveReceiptOwner.incarnation !== next.incarnation))) saveReceiptOwner = undefined;
 		const changed = formBinding !== undefined && (
 			formBinding.device !== next.device || formBinding.incarnation !== next.incarnation ||
 			formBinding.link !== next.link
 		);
 		if (opened !== prevOpen || changed) ownerSession += 1;
+		if (!opened || (formBinding && (formBinding.device !== next.device ||
+			formBinding.link !== next.link))) refreshFormOnSettlement = false;
 		if (!opened || !prevOpen || !hasModeView) confirmingMode = undefined;
 		if (opened && !prevOpen) confirmingStart = false;
 		if (opened && active) confirmingStart = false;
@@ -259,6 +278,12 @@ $effect.pre(() => {
 			radioNotice = formBinding !== undefined && (changed || !prevOpen);
 			formBinding = { ...next, session: ownerSession };
 			reloadForm();
+			// An editor opened or rebound during a restart has only a read-only preview.
+			if (active && locked) refreshFormOnSettlement = true;
+		}
+		if (opened && refreshFormOnSettlement && !locked && next.incarnation && !reason) {
+			reloadForm();
+			refreshFormOnSettlement = false;
 		}
 		prevOpen = opened;
 		prevActive = active;
@@ -267,6 +292,7 @@ $effect.pre(() => {
 
 const canEdit = $derived(Boolean(radioToken) && !radioReason && !bindingUnsupported &&
 	formBinding !== undefined && current(formBinding));
+const canEditNow = $derived(canEdit && !stationLock.locked && !refreshFormOnSettlement);
 
 const securityLabel = $derived(
 	securityChoice?.kind === 'select'
@@ -302,7 +328,7 @@ const isFormValid = $derived(nameValid && passwordValid);
 // Reason surfaced on the start/stop control while it is disabled, so the operator
 // is never left guessing (busy op vs an incomplete form).
 const toggleDisabledReason = $derived(
-	toggling ? m["hotspotConfigurator.toggleReason.busy"]() : undefined,
+	toggling ? m["hotspotConfigurator.toggleReason.busy"]() : stationLockReason,
 );
 
 const nameError = $derived(
@@ -348,8 +374,9 @@ $effect(() => {
 // keeps the live QR/iface re-broadcast from clobbering the in-progress edits.
 async function handleSave() {
 	const original = formBinding;
-	if (!isFormValid || configuring || !canEdit || !original?.incarnation) return;
+	if (!isFormValid || configuring || !canEditNow || !original?.incarnation) return;
 	const controller = beginAdmission(original);
+	saveReceiptOwner = original;
 	const input = {
 		device: original.device, name, password, channel,
 		...(security !== undefined ? { security } : {}),
@@ -379,12 +406,14 @@ async function handleSave() {
 			return result ?? { success: false, error: 'binding-required' };
 		},
 		isCurrent: () => admission === controller && !controller.signal.aborted &&
-			(current(original) || (replaced && ownsAdmission(original))),
+			ownsAdmission(original) && (replaced || saveReceiptOwner === original),
 		onResult: (result) => {
 			if (wifiRadioChanged(result) && current(original)) {
 				radioNotice = true;
 				formBinding = capture();
-				reloadForm();
+				// A restart row still carries pre-commit credentials.
+				if (stationLock.locked) refreshFormOnSettlement = true;
+				else reloadForm();
 			}
 		},
 		failMessage: (result) => wifiFailureReason(result ?? {}) === 'hybrid-channel-not-permitted'
@@ -401,6 +430,7 @@ async function handleSave() {
 // confirm $effect below flips to `confirmed` once the snapshot reports the target
 // mode (the 15 s TTL valve is the backstop if the device never reports back).
 async function handleToggle() {
+	if (stationLock.locked) return;
 	if (isActive) {
 		const binding = capture();
 		toggleTarget = 'station';
@@ -426,7 +456,7 @@ async function handleToggle() {
 
 async function startConfirmed(incarnation: string) {
 	const original = capture();
-	if (incarnation !== original.incarnation || radioReason) return;
+	if (stationLock.locked || incarnation !== original.incarnation || radioReason) return;
 	startRefused = undefined;
 	const controller = beginAdmission(original);
 	const key = wifiHotspotOpKey(original.device, incarnation);
@@ -516,7 +546,7 @@ async function copyPassword() {
 	title={m["hotspotConfigurator.dialog.configHotspot"]()}
 >
 	<div class="space-y-5">
-		{#if isActive && radioNotice}
+		{#if isActive && radioNotice && !refreshFormOnSettlement}
 			<p class="text-muted-foreground text-xs" role="status" data-testid="hotspot-editor-radio-changed">
 				{m['hotspotConfigurator.radioChanged']()}
 			</p>
@@ -596,7 +626,7 @@ async function copyPassword() {
 					consentBlocked={confirmingStart}
 					shouldFocusRecoveredGate={enableHasFocus}
 					context={modeContext}
-					lockedReason={toggling ? m["network.wifiStationLock.hotspotPending"]() : undefined}
+					lockedReason={stationLockReason}
 				/>
 			</div>
 		{/if}
@@ -610,6 +640,7 @@ async function copyPassword() {
 					session={ownerSession}
 					reloaded={radioNotice}
 					focusOnOpen={focusRecoveredStart}
+					locked={stationLock.locked}
 					keepsStation={iface?.supports_ap_sta_concurrency === true &&
 						modeView?.desiredMode !== 'hotspot'}
 					onCancel={() => {
@@ -631,7 +662,7 @@ async function copyPassword() {
 			<div class="relative">
 				<Input
 					id="hotspot-name"
-					readonly={!canEdit}
+					readonly={!canEditNow}
 					class="pe-10"
 					autocapitalize="none"
 					autocomplete="off"
@@ -667,7 +698,7 @@ async function copyPassword() {
 			<div class="relative">
 				<Input
 					id="hotspot-password"
-					readonly={!canEdit}
+					readonly={!canEditNow}
 					class="pe-20"
 					autocapitalize="none"
 					autocomplete="off"
@@ -717,7 +748,7 @@ async function copyPassword() {
 			<Label class="text-sm font-medium" for="hotspot-channel">
 				{m["network.hotspot.channel"]()}
 			</Label>
-			<Select.Root disabled={!canEdit} onValueChange={(v) => (channel = v)} type="single" bind:value={channel}>
+			<Select.Root disabled={!canEditNow} onValueChange={(v) => (channel = v)} type="single" bind:value={channel}>
 				<Select.Trigger id="hotspot-channel" class="w-full">{channelLabel}</Select.Trigger>
 				<Select.Content>
 					{#each channelOptions as option (option.id)}
@@ -742,7 +773,7 @@ async function copyPassword() {
 					{m["hotspotConfigurator.hotspot.security"]()}
 				</Label>
 				<Select.Root
-					disabled={!canEdit}
+					disabled={!canEditNow}
 					onValueChange={(v) => {
 						// Narrowed rather than cast: the wire enum is the acceptance set,
 						// so a value outside it is refused instead of persisted.
@@ -835,7 +866,7 @@ async function copyPassword() {
 		<Button
 			bind:ref={toggleButton}
 			class="sm:min-w-28"
-			disabled={toggling || (!isActive && modeOwnsConsent)}
+			disabled={stationLock.locked || (!isActive && modeOwnsConsent)}
 			onclick={handleToggle}
 			title={toggleDisabledReason}
 			variant="outline"
@@ -849,7 +880,7 @@ async function copyPassword() {
 		</Button>
 		{/if}
 		{#if isActive && radioReason !== 'permanent-mac-unresolved'}
-		<Button class="sm:min-w-24" disabled={!canEdit || !isFormValid || configuring} onclick={handleSave}>
+		<Button class="sm:min-w-24" disabled={!canEditNow || !isFormValid || configuring} onclick={handleSave}>
 			{#if configuring}
 				<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
 			{:else}

@@ -88,6 +88,7 @@ import { canHotspot, HOTSPOT_UP_TO } from "./wifi-hotspot-types.ts";
 import type { HybridRestoreAttempt } from "./wifi-hybrid-target-diagnostics.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 import { takeWifiModeRequestRefusal } from "./wifi-mode-request.ts";
+import { trackWifiModeWitness } from "./wifi-mode-witness.ts";
 import {
 	bindingForRow,
 	verifiedWifiPortKey,
@@ -332,29 +333,41 @@ export async function setWifiAdapterMode(
 						),
 					);
 		let succeeded = false;
+		let awaitingTerminal = false;
+		let witness: ReturnType<typeof trackWifiModeWitness> | undefined;
+		const publish: AdapterModeOutcomePublisher = (device, outcome) => {
+			try {
+				deps.publishOutcome(device, outcome);
+			} finally {
+				if (!("pending" in outcome)) witness?.();
+			}
+		};
+		const terminalDeps = { ...deps, publishOutcome: publish };
 		try {
 			const result = await reconcileWifiAdapterModeLocked(owner, {
 				row: wifiInterface,
 				target,
-				publish: deps.publishOutcome,
+				publish,
 				publishPending: () => {
-					deps.publishOutcome(id, { pending: true, mode: target });
+					if (canHotspot(wifiInterface)) {
+						witness = trackWifiModeWitness(wifiInterface);
+					}
+					publish(id, { pending: true, mode: target });
 				},
 				start: async () => {
 					if (binding && (!(await operation.check()) || !operation.current())) {
-						deps.publishOutcome(id, wifiOperationChanged);
+						publish(id, wifiOperationChanged);
 						return wifiOperationChanged;
 					}
-					const publish = chainModeTerminal(id, target, deps);
-					return binding
-						? deps.startHotspot(id, publish, undefined, binding)
-						: deps.startHotspot(id, publish);
+					const terminal = chainModeTerminal(id, target, terminalDeps);
+					// The outer terminal (including timeout) owns the witness, not the Start monitor.
+					return deps.startHotspot(id, terminal, undefined, binding);
 				},
 				stop: async (terminal) => {
 					if (binding && (!(await operation.check()) || !operation.current()))
 						return wifiOperationChanged;
 					const publish = terminal
-						? chainModeTerminal(id, target, deps)
+						? chainModeTerminal(id, target, terminalDeps)
 						: deps.publishHotspotOutcome;
 					return binding
 						? deps.stopHotspot(id, publish, binding)
@@ -362,9 +375,14 @@ export async function setWifiAdapterMode(
 				},
 			});
 			succeeded = result.success;
+			awaitingTerminal = result.success && result.accepted === true;
 			return result;
 		} finally {
-			if (!succeeded) undo?.();
+			try {
+				if (!succeeded) undo?.();
+			} finally {
+				if (!awaitingTerminal) witness?.();
+			}
 		}
 	};
 	const lock = stationTarget

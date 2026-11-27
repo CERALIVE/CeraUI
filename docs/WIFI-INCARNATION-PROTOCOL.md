@@ -47,6 +47,35 @@ before Up. Boot does not prune superseded profiles; eligible stale profiles
 can remain until the next operator Start.
 The service remembers observed address collisions across empty discovery passes.
 
+## Prior mode during hotspot and adapter mode changes [PARTIAL; host proof only]
+
+When a radio with a proven lifetime begins a hotspot transition, the local
+status row may include `leaving`, the observed adapter mode before the change.
+`null` means that mode was not verified; omission preserves the existing status
+behavior. This is display-only and does not change the reported physical mode
+or authorize a Wi-Fi operation. A changed incarnation cannot inherit it. A
+hotspot-only operation's witness also retires when its hotspot object changes;
+an admitted mode transaction's witness stays on the same radio across both
+legs and profile replacement until its outer terminal.
+
+The terminal outcome is followed by a local-only status frame without `leaving`,
+unless another operation on the same radio still owns the prior mode. Stop can
+take over a pending Start, including one initiated by a mode change, without
+dropping the prior mode in between. For a
+two-leg mode change, the field survives the intermediate Stop outcome and
+clears after the outer mode terminal. Remote status strips the field and
+receives no extra refresh frame.
+
+A hotspot transition marker belongs to the same hotspot object and radio
+incarnation. If a failed Save, Start, or guarded Stop has no normal final
+broadcast, the producer sends a local-only status update to withdraw its marker.
+This update neither rescans the radio nor changes retry or rollback authority.
+A terminal event alone does not unlock a peer whose status still reports a
+transition. Remote initial and ordinary status still serialize the legacy
+transition flag when cleanup needs it; local clients receive only the marker
+for the live operation. Discovery may carry the old Stop flag into a copied
+profile cache entry; a completed Stop clears only its own inherited flag.
+
 ## Backend limited mode [EXISTS; host and mock-browser proof only]
 
 Rows with unresolved permanent identity retain

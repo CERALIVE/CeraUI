@@ -139,12 +139,12 @@ $effect(() => {
 				     mutation dispatched into that window is refused DEVICE_BUSY. The
 				     controls therefore stay put and go disabled-with-reason rather than
 				     staying live and failing, and the reason is rendered ON SCREEN — the
-				     kiosk touchscreen cannot hover to reveal a `title`. Reads todo 7's
-				     `wifi-mode:` key too: it answers `idle` until that control exists, so
-				     this is inert today and cannot be forgotten when it lands. -->
+				     kiosk touchscreen cannot hover to reveal a `title`. Peers joining
+				     mid-change get the lock from the row before any outcome arrives. -->
 				{const stationLock = $derived(deriveWifiStationLock({
 					hotspot: getOperationPhase(wifiHotspotOpKey(id, iface.incarnation)),
 					mode: getOperationPhase(wifiModeOpKey(id, iface.incarnation)),
+					status: iface,
 				}))}
 				{const stationLockReason = $derived(stationLock.reasonKey
 					? resolveMessageKey(stationLock.reasonKey)
@@ -387,7 +387,7 @@ $effect(() => {
 										hotspotLive: hotspotIsActive(iface),
 									}}
 									errorPlacement="host"
-									lockedReason={isSwitching ? stationLockReason : undefined}
+									lockedReason={stationLockReason}
 								/>
 							</Popover.Content>
 							</Popover.Root>
@@ -397,11 +397,11 @@ $effect(() => {
 									{m["network.dialog.hotspotDetails"]()}
 								</Button>
 							{:else}
-								<Button data-testid="open-wifi-selector-dialog" size="sm" variant="ghost" onclick={() => onConnect(id)}>
+								<Button data-testid="open-wifi-selector-dialog" disabled={stationLock.locked} title={stationLockReason} size="sm" variant="ghost" onclick={() => onConnect(id)}>
 									{m["network.view.connect"]()}
 								</Button>
 							{/if}
-							<WifiModeSelector view={modeView} context={{ stationLinkLive: connected, hotspotLive: hotspotIsActive(iface) }} />
+							<WifiModeSelector view={modeView} lockedReason={stationLockReason} context={{ stationLinkLive: connected, hotspotLive: hotspotIsActive(iface) }} />
 						{/if}
 					{/snippet}
 					{#snippet details()}

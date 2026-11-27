@@ -10,7 +10,10 @@ import {
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { WifiAdapterMode } from "@ceraui/rpc/schemas";
+import {
+	statusResponseSchema,
+	type WifiAdapterMode,
+} from "@ceraui/rpc/schemas";
 import * as runner from "../helpers/run.ts";
 import { run } from "../helpers/run.ts";
 import * as config from "../modules/config.ts";
@@ -21,6 +24,7 @@ import {
 	onWifiChange,
 	setWifiState,
 } from "../modules/wifi/state/wifi-state.ts";
+import { broadcastWifiState, wifiBuildMsg } from "../modules/wifi/wifi.ts";
 import {
 	getPersistedWifiAdapterMode,
 	getPersistedWifiAdapterModes,
@@ -32,6 +36,7 @@ import {
 	wifiAdapterModeRestoreSource,
 } from "../modules/wifi/wifi-adapter-mode-events.ts";
 import {
+	defaultAdapterModeDeps,
 	setWifiAdapterMode,
 	startWifiAdapterModeRestore,
 } from "../modules/wifi/wifi-adapter-mode-transition.ts";
@@ -56,6 +61,7 @@ import type {
 import * as interfaces from "../modules/wifi/wifi-interfaces.ts";
 import { wifiRadioIdentity } from "../modules/wifi/wifi-radio-identity.ts";
 import { wifiRadioObservation } from "../modules/wifi/wifi-radio-observation.ts";
+import * as compat from "../rpc/compat.ts";
 import {
 	nmcliFieldNames,
 	nmcliFieldOutput,
@@ -277,6 +283,280 @@ afterEach(async () => {
 	setWifiState({});
 	await rm(scratch, { recursive: true, force: true });
 });
+
+function captureModePublications() {
+	const frames: unknown[][] = [];
+	const status = (scope: string, type: string, payload: unknown) => {
+		if (type !== "status") return;
+		const wifi = statusResponseSchema.parse(payload).wifi?.[row.id];
+		if (wifi)
+			frames.push([scope, wifi.observed_mode, wifi.leaving, wifi.transition]);
+	};
+	spyOn(compat, "broadcastMsg").mockImplementation((type, payload) =>
+		status("normal", type, payload),
+	);
+	spyOn(compat, "broadcastMsgLocal").mockImplementation((type, payload) => {
+		status("local", type, payload);
+		return "";
+	});
+	const publishOutcome: NonNullable<HotspotActivationDeps["publishOutcome"]> = (
+		kind,
+		_id,
+		outcome,
+	) => {
+		frames.push([kind, outcome.success]);
+	};
+	return { frames, publishOutcome };
+}
+
+for (const outcome of ["confirmed", "not-confirmed", "refused"] as const) {
+	test(`direct Start keeps Station through the terminal: ${outcome}`, async () => {
+		await prove(false);
+		await wifiRadioIdentity.discover([{ ifname: row.ifname, row }]);
+		expect(wifiBuildMsg()[row.id]?.incarnation).toBeString();
+		const { frames, publishOutcome } = captureModePublications();
+		const result = await wifiHotspotStart(
+			{ device: row.id },
+			{
+				...defaultHotspotDeps,
+				...(outcome === "refused" ? { nmConnect: async () => false } : {}),
+				broadcastState: broadcastWifiState,
+				publishOutcome,
+			},
+		);
+		if (outcome === "confirmed") settlePending(row.ifname, true);
+		if (outcome === "not-confirmed") await settlePending(row.ifname, false);
+		expect(result).toEqual(
+			outcome === "refused"
+				? { success: false, error: "activation-failed" }
+				: { success: true },
+		);
+		const settled = outcome === "confirmed" ? "hotspot" : "station";
+		expect(frames).toEqual([
+			["normal", "station", "station", "activating"],
+			["normal", settled, "station", undefined],
+			["start", outcome === "confirmed"],
+			["local", settled, undefined, undefined],
+		]);
+	});
+}
+
+test.each(["direct", "mode"] as const)(
+	"Stop takes over a pending %s Start without exposing the intermediate AP mode",
+	async (kind) => {
+		await prove(false);
+		await wifiRadioIdentity.discover([{ ifname: row.ifname, row }]);
+		const { frames, publishOutcome } = captureModePublications();
+		const request = { device: row.id };
+		if (kind === "direct") {
+			expect(
+				await wifiHotspotStart(request, {
+					...defaultHotspotDeps,
+					broadcastState: broadcastWifiState,
+					publishOutcome,
+				}),
+			).toEqual({ success: true });
+		} else {
+			spyOn(defaultHotspotDeps, "broadcastState").mockImplementation(
+				broadcastWifiState,
+			);
+			expect(
+				await setWifiAdapterMode(row.id, "hotspot", {
+					...defaultAdapterModeDeps,
+					publishHotspotOutcome: publishOutcome,
+					publishOutcome: (_device, result) => {
+						frames.push(
+							"pending" in result
+								? ["mode", "pending", result.mode]
+								: ["mode", result.success],
+						);
+					},
+				}),
+			).toEqual({ success: true, accepted: true, applied: "hotspot" });
+		}
+		// NM can report the AP before the Start monitor sends its outcome.
+		row.activeConn = AP;
+		row.activeMode = "ap";
+		expect(
+			await wifiHotspotStop(request, {
+				...defaultHotspotStopDeps,
+				broadcastState: broadcastWifiState,
+				publishOutcome,
+			}),
+		).toEqual({ success: true });
+		expect(frames).toEqual([
+			...(kind === "mode" ? [["mode", "pending", "hotspot"]] : []),
+			["normal", "station", "station", "activating"],
+			["normal", "hotspot", "station", undefined],
+			["start", false],
+			...(kind === "mode" ? [["mode", false]] : []),
+			["normal", "hotspot", "station", "deactivating"],
+			["normal", "station", "station", undefined],
+			["stop", true],
+			["local", "station", undefined, undefined],
+		]);
+	},
+);
+
+test("a second Start retires the superseded observer without holding Station past its own terminal", async () => {
+	await prove(false);
+	await wifiRadioIdentity.discover([{ ifname: row.ifname, row }]);
+	const { frames, publishOutcome } = captureModePublications();
+	const deps = {
+		...defaultHotspotDeps,
+		broadcastState: broadcastWifiState,
+		publishOutcome,
+	};
+	for (const attempt of ["first", "second"]) {
+		expect(await wifiHotspotStart({ device: row.id, attempt }, deps)).toEqual({
+			success: true,
+		});
+	}
+	settlePending(row.ifname, true);
+	expect(frames).toEqual([
+		["normal", "station", "station", "activating"],
+		["normal", "station", "station", "activating"],
+		["normal", "hotspot", "station", undefined],
+		["start", true],
+		["local", "hotspot", undefined, undefined],
+	]);
+});
+
+for (const outcome of [
+	"confirmed",
+	"stop-refused",
+	"start-refused",
+	"timed-out",
+] as const) {
+	test(`Hybrid to Hotspot keeps Hybrid through the mode terminal: ${outcome}`, async () => {
+		row.concurrentHotspot = { ifname: "clap-wlan0", activeConn: AP };
+		persistWifiAdapterMode(MAC, "hybrid");
+		await prove();
+		await wifiRadioIdentity.discover([{ ifname: row.ifname, row }]);
+		expect(wifiBuildMsg()[row.id]?.incarnation).toBeString();
+		const { frames, publishOutcome } = captureModePublications();
+		spyOn(defaultHotspotDeps, "broadcastState").mockImplementation(
+			broadcastWifiState,
+		);
+		spyOn(defaultHotspotStopDeps, "broadcastState").mockImplementation(
+			broadcastWifiState,
+		);
+		if (outcome === "stop-refused")
+			spyOn(defaultHotspotStopDeps, "nmDisconnect").mockResolvedValue(false);
+		if (outcome === "start-refused")
+			spyOn(defaultHotspotDeps, "nmConnect").mockResolvedValue(false);
+		let expire: (() => void) | undefined;
+		const result = await setWifiAdapterMode(row.id, "hotspot", {
+			...defaultAdapterModeDeps,
+			armTerminalTimeout: (callback) => {
+				expire = callback;
+				return () => {
+					expire = undefined;
+				};
+			},
+			publishHotspotOutcome: publishOutcome,
+			publishOutcome: (_device, result) => {
+				frames.push(
+					"pending" in result
+						? ["mode", "pending", result.mode]
+						: ["mode", result.success],
+				);
+			},
+		});
+		const stopped = outcome !== "stop-refused";
+		const confirmed = outcome === "confirmed";
+		const timedOut = outcome === "timed-out";
+		if (confirmed) settlePending(row.ifname, true);
+		expect(result).toEqual(
+			confirmed || timedOut
+				? { success: true, accepted: true, applied: "hotspot" }
+				: {
+						success: false,
+						error: stopped ? "activation-failed" : "deactivation-failed",
+					},
+		);
+		if (timedOut) {
+			if (!expire) throw new Error("Mode terminal timeout was not armed");
+			expire();
+			settlePending(row.ifname, true);
+		}
+		const final = confirmed ? "hotspot" : stopped ? "station" : "hybrid";
+		expect(frames).toEqual([
+			["mode", "pending", "hotspot"],
+			["normal", "hybrid", "hybrid", "deactivating"],
+			["normal", stopped ? "station" : "hybrid", "hybrid", undefined],
+			["stop", stopped],
+			...(stopped
+				? [
+						["normal", "station", "hybrid", "activating"],
+						...(timedOut
+							? []
+							: [
+									["normal", final, "hybrid", undefined],
+									["start", confirmed],
+								]),
+					]
+				: []),
+			["mode", confirmed],
+			["local", final, undefined, timedOut ? "activating" : undefined],
+			...(timedOut
+				? [
+						["normal", "hotspot", undefined, undefined],
+						["start", true],
+					]
+				: []),
+		]);
+	});
+}
+
+for (const { success, replaced } of [
+	{ success: true, replaced: false },
+	{ success: false, replaced: false },
+	{ success: true, replaced: true },
+]) {
+	test(`direct Stop retains only its own prior mode and refreshes local peers, success=${success}, replaced=${replaced}`, async () => {
+		row.conn = AP;
+		row.activeConn = AP;
+		row.activeMode = "ap";
+		await wifiRadioIdentity.discover([{ ifname: row.ifname, row }]);
+		const incarnation = wifiBuildMsg()[row.id]?.incarnation;
+		expect(incarnation).toBeString();
+		const { frames, publishOutcome } = captureModePublications();
+		expect(
+			await wifiHotspotStop(
+				{ device: row.id },
+				{
+					...defaultHotspotStopDeps,
+					broadcastState: broadcastWifiState,
+					nmDisconnect: async () => {
+						if (replaced) {
+							await wifiRadioIdentity.discover([]);
+							await wifiRadioIdentity.discover([{ ifname: row.ifname, row }]);
+							const replacement = wifiBuildMsg()[row.id];
+							expect(replacement?.incarnation).toBeString();
+							expect(replacement?.incarnation).not.toBe(incarnation);
+							expect(replacement).not.toHaveProperty("leaving");
+							expect(replacement).not.toHaveProperty("transition");
+						}
+						return success;
+					},
+					publishOutcome,
+				},
+			),
+		).toEqual(
+			success
+				? { success: true }
+				: { success: false, error: "deactivation-failed" },
+		);
+		const settled = success ? "station" : "hotspot";
+		expect(frames).toEqual([
+			["normal", "hotspot", "hotspot", "deactivating"],
+			["normal", settled, replaced ? undefined : "hotspot", undefined],
+			["stop", success],
+			["local", settled, undefined, undefined],
+		]);
+	});
+}
 
 test("one discovery edge causes exactly one failed read of expired retained capability evidence", async () => {
 	let now = 0;

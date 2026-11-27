@@ -46,7 +46,15 @@ export function projectRemoteConfig(payload: unknown): unknown {
 	return config;
 }
 
-/** Remote status retains credentials and omits only local radio lifetime tokens. */
+function omitLocalWifiStatus(value: unknown): unknown {
+	if (typeof value !== "object" || value === null || !("leaving" in value)) {
+		return omitIncarnation(value);
+	}
+	const { leaving: _leaving, ...status } = value;
+	return omitIncarnation(status);
+}
+
+/** Remote status retains credentials and omits local radio presentation witnesses. */
 export function projectRemoteStatus(payload: unknown): unknown {
 	if (
 		typeof payload !== "object" ||
@@ -61,11 +69,11 @@ export function projectRemoteStatus(payload: unknown): unknown {
 	return {
 		...payload,
 		wifi: Array.isArray(payload.wifi)
-			? payload.wifi.map(omitIncarnation)
+			? payload.wifi.map(omitLocalWifiStatus)
 			: Object.fromEntries(
 					Object.entries(payload.wifi).map(([id, iface]) => [
 						id,
-						omitIncarnation(iface),
+						omitLocalWifiStatus(iface),
 					]),
 				),
 	};

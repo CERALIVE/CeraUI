@@ -123,11 +123,13 @@ import {
 	DEFAULT_HOTSPOT_SECURITY,
 	hotspotSecurityFields,
 } from "./wifi-hotspot-security.ts";
+import { retireReplacedHotspotTransition } from "./wifi-hotspot-transition.ts";
 import {
 	canHotspot,
 	type ExistingHotspotConn,
 	HOTSPOT_UP_TO,
 	type HotspotActivationDeps,
+	type HotspotStartPublication,
 	type HotspotStartResult,
 	hotspotBindingFields,
 	isHotspotActive,
@@ -147,6 +149,7 @@ import {
 	getMacAddressForWifiInterface,
 	wifiUpdateDevices,
 } from "./wifi-interfaces.ts";
+import { holdWifiModeWitness } from "./wifi-mode-witness.ts";
 import {
 	bindingForRow,
 	sampleWifiOperationRadio,
@@ -710,6 +713,8 @@ async function prepareHotspotLocked(
 
 // ─── start (atomic, NM-confirmed, with rollback) ─────────────────────────────
 
+type StartRefusal = Extract<HotspotStartResult, { success: false }>;
+
 export async function wifiHotspotStart(
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["start"]> & {
 		attempt?: string | undefined;
@@ -729,32 +734,19 @@ export async function wifiHotspotStart(
 					kind === "start" ? attempt : undefined,
 				),
 		};
-	const result = await resolveAndStart(msg, deps);
-	/*
-	  A refusal ends here, so it is published here. A SUCCESS is deliberately not:
-	  it means the transaction was admitted, and the terminal frame for it is owed
-	  by whichever branch actually resolved the outcome — the already-active
-	  short-circuit publishes immediately, a real activation publishes when the
-	  bounded NM confirmation settles. Publishing success twice would resolve the
-	  operator's op before NetworkManager has answered.
-	*/
-	if (!result.success) deps.publishOutcome?.("start", msg.device, result);
-	return result;
-}
-
-async function resolveAndStart(
-	msg: NonNullable<WifiHotspotMessage["hotspot"]["start"]>,
-	deps: HotspotActivationDeps,
-): Promise<HotspotStartResult> {
+	const refuse = (result: StartRefusal) => {
+		deps.publishOutcome?.("start", msg.device, result);
+		return result;
+	};
 	const macAddress = getMacAddressForWifiInterface(msg.device);
-	if (!macAddress) return { success: false, error: "no-device" };
+	if (!macAddress) return refuse({ success: false, error: "no-device" });
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
-	if (!wifiInterface) return { success: false, error: "no-device" };
+	if (!wifiInterface) return refuse({ success: false, error: "no-device" });
 	if (!canHotspot(wifiInterface))
-		return { success: false, error: "unsupported" };
+		return refuse({ success: false, error: "unsupported" });
 
-	return startHotspotForInterface(macAddress, wifiInterface, deps);
+	return startHotspotForInterface(macAddress, wifiInterface, deps, refuse);
 }
 
 /**
@@ -772,46 +764,72 @@ export async function startHotspotForInterface(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps = defaultHotspotDeps,
+	refuse: (result: StartRefusal) => StartRefusal = (result) => result,
 ): Promise<HotspotStartResult> {
 	const target = { registryKey: macAddress, modeTarget: wifiInterface };
 	const lock = await withWifiAdapterLock(target, () =>
 		admitWifiRequest(
 			wifiInterface,
 			async (binding): Promise<HotspotStartResult> => {
+				let releaseWitness: (() => void) | undefined;
+				const release = () => releaseWitness?.();
 				let undo: (() => void) | undefined;
 				let succeeded = false;
 				try {
-					const result = await startHotspotLocked(
-						macAddress,
-						wifiInterface,
-						deps,
-						(target) => {
-							if (deps.recordIntent) {
-								undo = recordWifiAdapterModeIntent(
-									resolveWifiAdapterOwner(macAddress, wifiInterface),
-									target,
-									deps.recordIntent,
-									verifiedWifiPortKey(
-										binding ?? bindingForRow(macAddress, wifiInterface),
-									),
-								);
-							}
-						},
-						undefined,
-						binding ?? bindingForRow(macAddress, wifiInterface),
-					);
-					succeeded = result.success;
-					return result;
+					let result: HotspotStartResult;
+					try {
+						result = await startHotspotLocked(macAddress, wifiInterface, deps, {
+							binding: binding ?? bindingForRow(macAddress, wifiInterface),
+							recordIntent: (target) => {
+								if (deps.recordIntent) {
+									undo = recordWifiAdapterModeIntent(
+										resolveWifiAdapterOwner(macAddress, wifiInterface),
+										target,
+										deps.recordIntent,
+										verifiedWifiPortKey(
+											binding ?? bindingForRow(macAddress, wifiInterface),
+										),
+									);
+								}
+							},
+							holdWitness: () => {
+								releaseWitness = holdWifiModeWitness(wifiInterface);
+							},
+							publication: {
+								// Only the already-up branch or pending monitor owns success.
+								publishOutcome: (...args) => {
+									try {
+										deps.publishOutcome?.(...args);
+									} finally {
+										release();
+									}
+								},
+								onConfirmationSuperseded: release,
+							},
+						});
+						succeeded = result.success;
+					} finally {
+						if (!succeeded) undo?.();
+					}
+					return result.success ? result : refuse(result);
 				} finally {
-					if (!succeeded) undo?.();
+					if (!succeeded) release();
 				}
 			},
-			(refusal) => refusal,
+			refuse,
 		),
 	);
-	if (!lock.success) return { success: false, error: lock.error };
+	if (!lock.success) return refuse({ success: false, error: lock.error });
 	return lock.result;
 }
+
+type HotspotStartContext = {
+	readonly recordIntent?: (target: WifiAdapterMode) => void;
+	readonly restoreAttempt?: HybridRestoreAttempt | undefined;
+	readonly binding?: WifiOperationBinding | undefined;
+	readonly publication?: HotspotStartPublication;
+	readonly holdWitness?: (() => void) | undefined;
+};
 
 /**
  * Internal delegate: the caller owns the adapter lock, its intent transaction
@@ -822,9 +840,13 @@ export async function startHotspotLocked(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps,
-	recordIntent?: (target: WifiAdapterMode) => void,
-	restoreAttempt?: HybridRestoreAttempt,
-	binding?: WifiOperationBinding,
+	{
+		recordIntent,
+		restoreAttempt,
+		binding,
+		publication = deps,
+		holdWitness,
+	}: HotspotStartContext = {},
 ): Promise<HotspotStartResult> {
 	const operation = wifiOperationGuard(binding);
 	if (binding && (!(await operation.check()) || !operation.current()))
@@ -861,7 +883,9 @@ export async function startHotspotLocked(
 			delete hotspot.password;
 			delete hotspot.channel;
 			delete hotspot.security;
+			delete hotspot.transition;
 			wifiInterface.hotspot = hotspot;
+			retireReplacedHotspotTransition(wifiInterface);
 		}
 	}
 	const owned = hotspotOwnershipGuard(owner, wifiInterface);
@@ -1003,7 +1027,7 @@ export async function startHotspotLocked(
 		if (binding && (!(await operation.check()) || !operation.current()))
 			return wifiOperationChanged;
 		recordChosenMode(observedWifiAdapterMode(wifiInterface));
-		deps.publishOutcome?.("start", wifiInterface.id, { success: true });
+		publication.publishOutcome?.("start", wifiInterface.id, { success: true });
 		return { success: true };
 	}
 	/*
@@ -1107,6 +1131,13 @@ export async function startHotspotLocked(
 	let refusal: HotspotStartResult | undefined;
 	let rollbackState: (() => HotspotStartResult) | undefined;
 	let targetRadio: RadioSample | undefined;
+	let transition: ReturnType<typeof beginHotspotTransition> | undefined;
+	using _publicationScope = {
+		[Symbol.dispose]() {
+			// Unfinished cleanup keeps its existing recovery authority, not a UI lock.
+			if (!acceptedAllocation) transition?.finish();
+		},
+	};
 	try {
 		if (binding && concurrentInterface) {
 			const allocated = targetRecords.get(concurrentInterface)?.target;
@@ -1188,7 +1219,10 @@ export async function startHotspotLocked(
 
 		// Begin the transition: broadcast `activating` immediately (responsive UI),
 		// suppress dup-IP warnings for the window, but DO NOT flip mode yet.
-		beginHotspotTransition(wifiInterface, "activating");
+		// Admission/cleanup can replace the profile before the ownership guard.
+		holdWitness?.();
+		const claim = beginHotspotTransition(wifiInterface, "activating");
+		transition = claim;
 		if (!concurrentInterface) deps.setDupIpSuppression(ifname, true);
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface); // still station (isHotspot false)
@@ -1200,7 +1234,7 @@ export async function startHotspotLocked(
 				(binding && getWifiInterfaceByMacAddress(binding.key) !== wifiInterface)
 			)
 				return { success: false, error: "activation-failed" };
-			if (hotspot.transition === "activating") delete hotspot.transition;
+			claim.clear();
 			if (!concurrentInterface) deps.setDupIpSuppression(ifname, false);
 			const current = getWifiState();
 			if (current[macAddress] === projected) {
@@ -1212,6 +1246,7 @@ export async function startHotspotLocked(
 			if (wifiInterface.concurrentHotspot === virtualClaim)
 				transitionVirtualBinding(wifiInterface, { kind: "retire" });
 			deps.broadcastState();
+			claim.finish(false);
 			return {
 				success: false,
 				error: "activation-failed",
@@ -1634,10 +1669,12 @@ export async function startHotspotLocked(
 				},
 				binding,
 				radioProof: operation.observe,
+				transition: claim,
 				...(concurrentInterface ? { allocation: concurrentInterface } : {}),
 			},
 			wifiInterface,
 			deps,
+			publication,
 		);
 		acceptedAllocation = true;
 		return { success: true };

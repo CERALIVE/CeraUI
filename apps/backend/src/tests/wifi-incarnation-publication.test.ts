@@ -175,12 +175,32 @@ for (const sameMac of [false, true]) {
 										}).wifi ?? {}
 									);
 								});
-								expect(observations).toEqual(expectedFrames);
-								expect(frames).toEqual(expectedFrames);
-								expected =
-									statusResponseSchema.parse({
-										wifi: expectedFrames.at(-1),
-									}).wifi ?? {};
+								const confirmedFrame = expectedFrames.at(-1);
+								if (!confirmedFrame)
+									throw new Error("Missing settled Hotspot baseline");
+								const beforeRoster = expectedFrames
+									.slice(0, -1)
+									.map<WifiStatus>((frame) => {
+										const wifi = frame[id];
+										if (!wifi) throw new Error("Missing Wi-Fi row");
+										return wifi.transition === "activating" ||
+											wifi.mode === "hotspot"
+											? { [id]: { ...wifi, leaving: "station" } }
+											: frame;
+									});
+								const firstAp = expectedFrames.find(
+									(frame) => frame[id]?.mode === "hotspot",
+								);
+								if (!firstAp) throw new Error("Missing initial Hotspot frame");
+								// The cached settlement does not wait for the AP client poll.
+								const expectedLocal = [
+									...beforeRoster,
+									firstAp,
+									confirmedFrame,
+								];
+								expect(observations).toEqual(expectedLocal);
+								expect(frames).toEqual(expectedLocal);
+								expected = confirmedFrame;
 							} else {
 								const registry = getWifiInterfacesByMacAddress();
 								expect(Object.keys(registry)).toEqual(["degraded:wlan0"]);

@@ -23,6 +23,7 @@ import {
 	isHotspotActive,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import { inheritWifiModeWitness } from "./wifi-mode-witness.ts";
 import {
 	sampleWifiOperationRadio,
 	wifiOperationChanged,
@@ -72,9 +73,10 @@ export async function teardownHotspotLocked(
 	const wasConcurrent = concurrent !== undefined;
 	const activeConn = wifiInterface.activeConn;
 	const activeMode = wifiInterface.activeMode;
+	inheritWifiModeWitness(wifiInterface);
 	await settlePending(wifiInterface.ifname, false);
 
-	beginHotspotTransition(wifiInterface, "deactivating");
+	using transition = beginHotspotTransition(wifiInterface, "deactivating");
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 
@@ -116,10 +118,7 @@ export async function teardownHotspotLocked(
 			},
 		})
 	).success;
-	if (!dispatched && operation?.changed) {
-		delete wifiInterface.hotspot.transition;
-		return wifiOperationChanged;
-	}
+	if (!dispatched && operation?.changed) return wifiOperationChanged;
 	if (dispatched && pendingCleanup && !disconnected) {
 		const activity = await readHotspotProfileActivity(conn);
 		disconnected = activity === "inactive" || activity === "absent";
@@ -127,10 +126,8 @@ export async function teardownHotspotLocked(
 	const result: HotspotStopResult = disconnected
 		? { success: true }
 		: { success: false, error: "deactivation-failed" };
-	if (operation && (!(await operation.check()) || !operation.current())) {
-		delete wifiInterface.hotspot.transition;
+	if (operation && (!(await operation.check()) || !operation.current()))
 		return result;
-	}
 	if (disconnected) {
 		const sameObservation =
 			wifiInterface.activeConn === activeConn &&
@@ -159,11 +156,12 @@ export async function teardownHotspotLocked(
 		}
 	}
 
-	delete wifiInterface.hotspot.transition;
+	transition.clear();
 	if (!wasConcurrent) {
 		deps.setDupIpSuppression(wifiInterface.ifname, false);
 	}
 	deps.broadcastState();
+	transition.finish(false);
 	syncWifiStateCache(macAddress, wifiInterface);
 	void deps.rescan();
 	// The transition is cleared either way, so the state broadcast above looks

@@ -32,7 +32,7 @@ export type EquivalenceFixture = {
 	readonly publication?: () => Promise<void>;
 };
 
-// The recorded legacy transcript predates these two additive observations.
+// The recorded legacy transcript predates these additive display observations.
 function legacyWifiStatus(rows: unknown): unknown {
 	if (typeof rows !== "object" || rows === null) return rows;
 	return Object.fromEntries(
@@ -42,6 +42,7 @@ function legacyWifiStatus(rows: unknown): unknown {
 			}
 			const {
 				incarnation: _incarnation,
+				leaving: _leaving,
 				observed_mode: _observedMode,
 				...legacy
 			} = row as Record<string, unknown>;

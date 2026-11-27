@@ -30,7 +30,9 @@ import {
 } from "vitest";
 
 import {
+	beginOperation,
 	clearOperation,
+	confirmOperation,
 	failOperation,
 	getOperationPhase,
 } from "$lib/rpc/async-operation.svelte";
@@ -172,6 +174,57 @@ afterEach(() => {
 });
 
 describe("WifiSelectorDialog — identity-keyed connect confirmation", () => {
+	it.each([
+		["hotspot", { transition: "deactivating" }],
+		["wifi-mode", { leaving: "station" }],
+	] as const)(
+		"keeps the already-open picker locked through a %s terminal until status settles",
+		async (operation, marker) => {
+			const baseline = {
+				...radio({ ssids: [SHARED_SSID, OPEN_SSID] }),
+				incarnation: "radio-A",
+			};
+			const key = `${operation}:0:radio-A`;
+			publishWifi({ "0": baseline });
+			render(WifiSelectorDialog, { props: { open: true, deviceId: "0" } });
+			const saved = screen.getByRole("button", {
+				name: `Connect ${SHARED_SSID}`,
+			}) as HTMLButtonElement;
+			const fresh = screen.getByRole("button", {
+				name: `Connect ${OPEN_SSID}`,
+			}) as HTMLButtonElement;
+			expect(saved.disabled).toBe(false);
+			expect(fresh.disabled).toBe(false);
+			try {
+				beginOperation(key);
+				publishWifi({ "0": { ...baseline, ...marker } });
+				await tick();
+				confirmOperation(key);
+				await tick();
+				expect(saved.disabled).toBe(true);
+				expect(fresh.disabled).toBe(true);
+				const reason =
+					operation === "hotspot"
+						? m["network.wifiStationLock.hotspotPending"]()
+						: m["network.wifiStationLock.modePending"]();
+				expect(screen.getByText(reason)).toBeTruthy();
+				await fireEvent.click(saved);
+				await fireEvent.click(fresh);
+				expect(connect).not.toHaveBeenCalled();
+				expect(connectNew).not.toHaveBeenCalled();
+				publishWifi({ "0": baseline });
+				await tick();
+				expect(saved.disabled).toBe(false);
+				expect(fresh.disabled).toBe(false);
+				expect(screen.queryByText(reason)).toBeNull();
+				await fireEvent.click(saved);
+				expect(connect).toHaveBeenCalledExactlyOnceWith({ uuid: CHOSEN_UUID });
+			} finally {
+				clearOperation(key);
+			}
+		},
+	);
+
 	it("shows scan guidance without requesting a join when the open row has no BSSID", async () => {
 		publishWifi({
 			"0": {
