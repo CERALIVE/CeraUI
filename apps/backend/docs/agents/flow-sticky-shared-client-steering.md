@@ -73,9 +73,13 @@ Monitor-only placeholders have no parser identity yet. Their first OS metadata
 advances the topology generation while adopting the monitor's lifetime, preserving
 its covering bus read and rejecting type reads begun before that publication.
 Discovery, the netif parser, readiness and uplink planning share
-`isSupportedWifiIfname` in `wifi-concurrent-interface.ts`. Virtual `clap-*` AP
-legs remain client zones by name and do not require station classification;
-any present `wl*` parent still does.
+`isSupportedWifiIfname` in `wifi-interface-creation.ts` (re-exported from
+`wifi-concurrent-interface.ts`). Virtual `clap-*` AP legs remain client zones
+by name and do not require station classification; any present `wl*` parent,
+or interface with the kernel's `phy80211` link, still does. The name rule is a
+fast path; the cfg80211 link admits radios with vendor-specific names (and
+makes such a second netdev a witness of its phy), while `clap-*` legs stay
+excluded.
 A failed nmcli listing, skipped device, per-device read error or `unknown` mode
 leaves readiness pending. This check precedes the empty-client-zone branch.
 Pending performs no apply, availability publication, retry, failure-backoff

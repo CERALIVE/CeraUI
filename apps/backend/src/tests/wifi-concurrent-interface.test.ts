@@ -14,15 +14,64 @@ import * as nm from "../modules/network/network-manager.ts";
 import {
 	concurrentApIfname,
 	ensureConcurrentApInterface,
+	isSupportedWifiIfname,
 	releaseConcurrentApInterface,
 	releaseCreatedConcurrentApInterface,
 	resetConcurrentInterfaceDepsForTest,
 	setConcurrentInterfaceDepsForTest,
+	wifiInterfaceReaders,
 } from "../modules/wifi/wifi-concurrent-interface.ts";
 import { iwCreationReceipt } from "./helpers/iw-creation-receipt.ts";
 
 afterEach(resetConcurrentInterfaceDepsForTest);
 afterEach(() => mock.restore());
+
+describe("supported Wi-Fi interfaces", () => {
+	test("accepts a non-wl radio with the kernel's cfg80211 link", () => {
+		spyOn(wifiInterfaceReaders, "pathExists").mockImplementation(
+			(path) => path === "/sys/class/net/ath0/phy80211",
+		);
+		expect(isSupportedWifiIfname("ath0")).toBe(true);
+	});
+
+	test("rejects an interface without a cfg80211 link, including a wext-only marker", () => {
+		spyOn(wifiInterfaceReaders, "pathExists").mockImplementation(
+			(path) => path === "/sys/class/net/ath0/wireless",
+		);
+		expect(isSupportedWifiIfname("ath0")).toBe(false);
+		expect(isSupportedWifiIfname("eth0")).toBe(false);
+	});
+
+	test("never builds a sysfs path from an unsafe name", () => {
+		const reader = spyOn(wifiInterfaceReaders, "pathExists").mockReturnValue(
+			true,
+		);
+		expect(isSupportedWifiIfname("../ath0")).toBe(false);
+		expect(reader).not.toHaveBeenCalled();
+	});
+
+	test.each(["clap-wlan0", "clap-ath0"])(
+		"excludes %s even with a cfg80211 link",
+		(ifname) => {
+			const reader = spyOn(wifiInterfaceReaders, "pathExists").mockReturnValue(
+				true,
+			);
+			expect(isSupportedWifiIfname(ifname)).toBe(false);
+			expect(reader).not.toHaveBeenCalled();
+		},
+	);
+
+	test.each(["wlan0", "wlp1s0", "wlx020000000001", "wlwg0"])(
+		"keeps %s as a name candidate",
+		(ifname) => {
+			const reader = spyOn(wifiInterfaceReaders, "pathExists").mockReturnValue(
+				false,
+			);
+			expect(isSupportedWifiIfname(ifname)).toBe(true);
+			expect(reader).not.toHaveBeenCalled();
+		},
+	);
+});
 
 describe("concurrent AP virtual interface", () => {
 	test("uses a deterministic Linux-safe interface name", () => {

@@ -38,4 +38,5 @@ export {
 	concurrentHotspotBindingFields,
 	isConcurrentApIfname,
 	isSupportedWifiIfname,
+	wifiInterfaceReaders,
 } from "./wifi-interface-creation.ts";
