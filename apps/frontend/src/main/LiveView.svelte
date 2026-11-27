@@ -875,12 +875,7 @@ function handleSelectAudioSource(selection: string) {
 	const asrc = audioSelectionWireId(selection, audioEntries);
 	const previous = audioOverride;
 	const earlier = pendingAudioPick;
-	audioOverride = {
-		asrc,
-		acodec: effectiveAudioCodec ?? 'aac',
-		delay: effectiveAudioDelay,
-	};
-	const picked = audioOverride;
+	const picked = handleAudioSelectionApplied(asrc);
 	const result = saveAudioPick(asrc).then(async (accepted) => {
 		// A refusal counts when reported, not when its rollback reaches the front.
 		if (!accepted) audioPickRefusalCount += 1;
@@ -927,6 +922,7 @@ function handleAudioSelectionApplied(asrc: string) {
 		acodec: effectiveAudioCodec ?? 'aac',
 		delay: effectiveAudioDelay,
 	};
+	return audioOverride;
 }
 
 // Pick the operator-relevant sensors out of the flat string map.
