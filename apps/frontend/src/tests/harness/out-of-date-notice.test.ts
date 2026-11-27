@@ -47,6 +47,7 @@ describe.each([
 ])("%s", (_page, checkOut, ownBuild) => {
 	let root: string;
 	let withdrawals: number;
+	let onSocketOpen: ((target: ServedDevice) => void) | undefined;
 	// Both pages' modules; today's types stand for the old page's.
 	let page: {
 		readonly subs: typeof import("$lib/rpc/subscriptions.svelte");
@@ -64,15 +65,21 @@ describe.each([
 
 	/** The device now running is `build`; the page is on it and signed in. */
 	async function signInTo(build: string | undefined): Promise<void> {
-		await device?.stop();
-		await waitFor(() =>
-			expect(page.subs.getConnectionState()).not.toBe("connected"),
-		);
-		device = await serveDevice(build, { max_br: 6000 });
-		page.client.rpcClient.connect();
-		await waitFor(() =>
-			expect(page.subs.getConnectionState()).toBe("connected"),
-		);
+		const opened = Promise.withResolvers<void>();
+		let replacement: ServedDevice | undefined;
+		onSocketOpen = (target) => {
+			if (target === replacement) opened.resolve();
+		};
+		try {
+			await device?.stop();
+			replacement = await serveDevice(build, { max_br: 6000 });
+			device = replacement;
+			// Only the client's retry may dial; an open on the retired device is not readiness.
+			await opened.promise;
+		} finally {
+			onSocketOpen = undefined;
+		}
+		expect(page.subs.getConnectionState()).toBe("connected");
 		expect(
 			await page.client.rpc.auth.login({
 				password: PASSWORD,
@@ -89,8 +96,12 @@ describe.each([
 			"WebSocket",
 			class extends RealWebSocket {
 				constructor(url: string | URL) {
-					if (device === undefined) throw new Error("no device to reach");
-					super(servedUrl(device, url));
+					const target = device;
+					if (target === undefined) throw new Error("no device to reach");
+					super(servedUrl(target, url));
+					this.addEventListener("open", () => onSocketOpen?.(target), {
+						once: true,
+					});
 					this.addEventListener("message", ({ data }) => {
 						const { notification } = JSON.parse(data);
 						for (const { id } of notification?.remove ?? [])

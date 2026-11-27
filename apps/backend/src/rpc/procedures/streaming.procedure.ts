@@ -3,7 +3,7 @@
  * Wraps existing streaming logic from modules/streaming/
  */
 
-import { CerastreamRpcError } from "@ceralive/cerastream";
+import { CerastreamRpcError, type StartParams } from "@ceralive/cerastream";
 import { unsupportedPipelineOverrides } from "@ceraui/rpc";
 import {
 	AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
@@ -71,6 +71,7 @@ import {
 	isAudioBackendSupported,
 } from "../../modules/streaming/audio-backend.ts";
 import {
+	canPickAudioInput,
 	launchAudioPlan,
 	pickedAudioInputs,
 	storedAudioInputs,
@@ -87,6 +88,7 @@ import {
 import { isBluetoothAudioSourceId } from "../../modules/streaming/bluetooth-audio.ts";
 import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
+import { hasStartRpcCode } from "../../modules/streaming/cerastream-start-attempt.ts";
 import {
 	compositionResidueShouldClear,
 	isCompositionSupported,
@@ -153,6 +155,7 @@ import {
 	getConfiguredEngine,
 	getStreamingBackend,
 } from "../../modules/streaming/streaming-engine.ts";
+import { AUDIO_SOURCE_PROBE_FAILED } from "../../modules/streaming/streamloop/start-stream.ts";
 import { start as startStream } from "../../modules/streaming/streamloop.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import { broadcastConfig } from "../config-broadcast.ts";
@@ -399,7 +402,7 @@ export const streamingStartProcedure = authedProcedure
 						composition: applied.composition ?? getConfig().composition,
 						video_codec: applied.video_codec ?? getConfig().video_codec,
 					};
-					const audio = launchAudioPlan(config);
+					const audio = launchAudioPlan(config, { attemptId });
 					// What the engine adapter hands over at a real start, after
 					// `validateConfig` drops a composition the engine does not advertise.
 					const composition =
@@ -407,7 +410,7 @@ export const streamingStartProcedure = authedProcedure
 						isCompositionSupported(getLastCapabilities())
 							? config.composition
 							: undefined;
-					startMockStreaming({
+					const params: StartParams = {
 						pipeline: config.pipeline ?? "test",
 						srt: {
 							host: "127.0.0.1",
@@ -421,7 +424,23 @@ export const streamingStartProcedure = authedProcedure
 						},
 						...(audio === undefined ? {} : { audio }),
 						...(composition === undefined ? {} : { composition }),
-					});
+					};
+					try {
+						startMockStreaming(params);
+					} catch (error) {
+						if (!hasStartRpcCode(error, "cerastream.audio.device_not_found"))
+							throw error;
+						// The mock skips the real audio probe but reports the same refusal.
+						legacyError = AUDIO_SOURCE_PROBE_FAILED;
+						throw new StreamStartFailure(
+							typedStartFailure(
+								attemptId,
+								"params",
+								"audio_source_unavailable",
+								legacyError,
+							),
+						);
+					}
 					broadcastMsg("status", {
 						is_streaming: true,
 						audio_mix_active: getAudioMixActive(),
@@ -915,8 +934,20 @@ export const setConfigProcedure = liveWriteProcedure
 			composition: config.composition,
 			video_codec: config.video_codec,
 		};
+		if (
+			input.audio_pick === true &&
+			input.asrc !== undefined &&
+			!canPickAudioInput(audioConfig, input.asrc)
+		)
+			return { success: false, error: "audio_source_unavailable", applied: {} };
 		if (audioInputs != null) {
-			const error = validateAudioInputs(audioInputs, audioConfig);
+			const error = validateAudioInputs(
+				audioInputs,
+				audioConfig,
+				input.audio_inputs === undefined && input.asrc !== undefined
+					? { id: input.asrc }
+					: undefined,
+			);
 			if (error !== undefined) return { success: false, error, applied: {} };
 		}
 

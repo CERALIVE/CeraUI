@@ -30,7 +30,10 @@ import {
 	saveConfig,
 	setConfigFilePath,
 } from "../modules/config.ts";
-import { setMockAudioDevicesProvider } from "../modules/streaming/audio.ts";
+import {
+	broadcastAudioSources,
+	setMockAudioDevicesProvider,
+} from "../modules/streaming/audio.ts";
 import {
 	launchAudioPlan,
 	primaryAudioInputId,
@@ -55,6 +58,7 @@ import {
 	getIsStreaming,
 	updateStatus,
 } from "../modules/streaming/streaming.ts";
+import * as websocket from "../modules/ui/websocket-server.ts";
 import { buildInitialStatus } from "../rpc/procedures/status.procedure.ts";
 import * as procedures from "../rpc/procedures/streaming.procedure.ts";
 import { makeRpcContext } from "./helpers/bond-toggle-fixture.ts";
@@ -598,6 +602,154 @@ test("network source id maps only its embedded input, not a microphone", async (
 			},
 		],
 	});
+});
+
+async function unplugSecond(tracks = [1]) {
+	const saved = [entry("Primary"), entry("Second", tracks)];
+	expect((await save(saved)).success).toBe(true);
+	setMockAudioDevicesProvider(() => ({ Primary: "hw:CARD=primary" }));
+	return saved;
+}
+
+test("muting Primary succeeds while the saved Second input is unplugged", async () => {
+	const saved = await unplugSecond();
+	expect((await change({ id: "Primary", mute: true })).success).toBe(true);
+	expect((await disk()).audio_inputs).toEqual([
+		{ ...entry("Primary"), mute: true },
+		saved[1],
+	]);
+	expect(buildInitialStatus().status).toMatchObject({
+		audio_mix_excluded: [{ id: "Second", reason: "unplugged" }],
+	});
+});
+
+test("an unplugged input keeps its saved slot so reconnect cannot strand the mix", async () => {
+	const saved = [
+		entry("Primary"),
+		{ ...entry("Second", [1, 2]), gain_db: -3, mute: true, delay_ms: 40 },
+		entry("Third", [2]),
+		entry("Fourth"),
+	];
+	expect((await save(saved)).success).toBe(true);
+	const { Second: _unplugged, ...remaining } = devices;
+	setMockAudioDevicesProvider(() => remaining);
+	expect(buildInitialStatus().status?.audio_mix_excluded).toMatchObject([
+		{ id: "Second", reason: "unplugged" },
+	]);
+	expect(await pick("Fifth")).toEqual({
+		success: false,
+		error: "audio_inputs_too_many",
+		applied: { relay_protocol: "srtla" },
+	});
+	expect(await change({ id: "Fifth", include: true })).toEqual({
+		success: false,
+		error: "audio_inputs_too_many",
+	});
+	expect((await disk()).audio_inputs).toEqual(saved);
+	expect((await disk()).asrc).toBe("Primary");
+
+	setMockAudioDevicesProvider(() => devices);
+	expect(buildInitialStatus().status?.audio_mix_excluded).toEqual([]);
+	expect((await change({ id: "Primary", mute: true })).success).toBe(true);
+	const muted = [{ ...entry("Primary"), mute: true }, ...saved.slice(1)];
+	expect((await disk()).audio_inputs).toEqual(muted);
+	expect((await start()).audio?.inputs).toEqual(
+		muted.map(({ id, ...values }) => ({ input_id: devices[id], ...values })),
+	);
+});
+
+test("refreshing status after unplug keeps the still-attached mock input available", async () => {
+	await unplugSecond();
+	const sent = spyOn(websocket, "broadcastMsg");
+	try {
+		await broadcastAudioSources();
+		const status = sent.mock.calls.find(
+			([type, data]) =>
+				type === "status" &&
+				typeof data === "object" &&
+				data !== null &&
+				"audio_sources" in data,
+		)?.[1];
+		expect(status).toMatchObject({
+			audio_mix_excluded: [{ id: "Second", reason: "unplugged" }],
+		});
+	} finally {
+		sent.mockRestore();
+	}
+});
+
+test("Start omits an unplugged input when another input covers its tracks", async () => {
+	const saved = await unplugSecond();
+	expect((await start()).audio?.inputs).toEqual([
+		{
+			input_id: "hw:CARD=primary",
+			tracks: [1],
+			gain_db: 0,
+			mute: false,
+			delay_ms: 0,
+		},
+	]);
+	expect((await disk()).audio_inputs).toEqual(saved);
+});
+
+test("an unplugged saved input can be removed without reassigning tracks", async () => {
+	await unplugSecond([2]);
+	expect((await change({ id: "Primary", mute: true })).success).toBe(true);
+	expect((await change({ id: "Second", include: false })).success).toBe(true);
+	expect((await disk()).audio_inputs).toEqual([
+		{ ...entry("Primary"), mute: true },
+	]);
+});
+
+test("removing the unplugged Track 1 input leaves Track 2 editable without changing routing", async () => {
+	const primary = entry("Primary", [2]);
+	expect((await save([primary, entry("Second")])).success).toBe(true);
+	setMockAudioDevicesProvider(() => ({ Primary: devices.Primary }));
+	expect((await change({ id: "Second", include: false })).success).toBe(true);
+	expect((await disk()).audio_inputs).toEqual([primary]);
+
+	expect(await change({ id: "Primary", mute: true })).toMatchObject({
+		success: true,
+		applied: { id: "Primary", mute: true },
+	});
+	expect(
+		await change({ id: "Primary", track: { number: 4, on: true } }),
+	).toEqual({
+		success: false,
+		error: "audio_tracks_gap",
+	});
+	expect((await disk()).audio_inputs).toEqual([{ ...primary, mute: true }]);
+});
+
+test("a saved RTMP embedded input stays visible but is not sent to a USB Start", async () => {
+	Object.assign(getConfig(), {
+		pipeline: "rtmp",
+		source: "rtmp",
+		asrc: "Auto",
+	});
+	expect((await save([entry("rtmp"), entry("Primary")])).success).toBe(true);
+	Object.assign(getConfig(), {
+		pipeline: "usb",
+		source: "usb",
+		asrc: "Primary",
+	});
+	expect((await change({ id: "Primary", mute: true })).success).toBe(true);
+	expect(buildInitialStatus().status).toMatchObject({
+		audio_mix_excluded: [{ id: "rtmp", reason: "other_source" }],
+	});
+	expect((await start()).audio?.inputs).toEqual([
+		{
+			input_id: "hw:CARD=primary",
+			tracks: [1],
+			gain_db: 0,
+			mute: true,
+			delay_ms: 0,
+		},
+	]);
+	expect((await disk()).audio_inputs).toEqual([
+		entry("rtmp"),
+		{ ...entry("Primary"), mute: true },
+	]);
 });
 
 test("live mix update drives the published client once and persists applied values", async () => {
@@ -1272,6 +1424,18 @@ test("in a full saved mix Start gives a main input outside it the first entry's 
 	]);
 });
 
+test("removing an unplugged primary does not let the picker substitute another input", async () => {
+	expect((await save([entry("Primary"), entry("Second")])).success).toBe(true);
+	setMockAudioDevicesProvider(() => ({ Second: "hw:CARD=second" }));
+	expect((await change({ id: "Primary", include: false })).success).toBe(true);
+	const selection = await pick("Primary");
+	expect(selection).toMatchObject({
+		success: false,
+		error: "audio_source_unavailable",
+	});
+	expect((await disk()).audio_inputs).toEqual([entry("Second")]);
+});
+
 test("a main input the device cannot open is not added to the mix Start sends", async () => {
 	expect(await save([entry("Primary"), entry("Second", [2])])).toMatchObject({
 		success: true,
@@ -1474,16 +1638,15 @@ test("full mix with Auto resolved to a same-device input: a new pick replaces th
 	}
 });
 
-test("a pick whose mix the device refuses changes nothing", async () => {
-	const saved = [entry("Primary"), entry("Fourth", [2])];
+test("picking another primary keeps a saved unplugged input in order with its original tracks", async () => {
+	const saved = [entry("Primary"), entry("Fourth", [2]), entry("Second")];
 	expect(await save(saved)).toMatchObject({ success: true });
 	const { Fourth: _unplugged, ...rest } = devices;
 	setMockAudioDevicesProvider(() => rest);
-	expect(await pick("Third")).toMatchObject({
-		success: false,
-		error: "audio_input_unknown",
-	});
-	expect(await disk()).toMatchObject({ asrc: "Primary", audio_inputs: saved });
+	expect((await pick("Third")).success).toBe(true);
+	const stored = await disk();
+	expect(stored.asrc).toBe("Third");
+	expect(stored.audio_inputs).toEqual([entry("Third"), ...saved]);
 });
 
 test("an asrc save without the pick marker changes no membership", async () => {

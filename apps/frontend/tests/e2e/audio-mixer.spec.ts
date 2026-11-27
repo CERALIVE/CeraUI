@@ -398,9 +398,189 @@ test.describe("audio mixer — caps-full", () => {
 		await thirdGainIsAdmittedLive(page);
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
+
+	test("an unavailable pick is not retried as an unvalidated save", async ({ page, backendRpc }) => {
+		wire.refuseAudioInputs("audio_source_unavailable");
+		await pickThird(page);
+		await expect(page.getByText("The selected audio input is not available.", { exact: true })).toBeVisible();
+		await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+		expect(wire.calls("streaming.setConfig").map((call) => call.input)).toEqual([
+			{ asrc: THIRD, audio_pick: true },
+		]);
+		expect(await backendRpc.call(["streaming", "getConfig"])).toMatchObject({ asrc: MAIN });
+	});
+
 	const mixEntry = (id: string, tracks = [1], gain_db = 0) => ({ id, tracks, gain_db, mute: false, delay_ms: 0 });
 	const savedConfig = (backendRpc: BackendRpc) =>
 		backendRpc.call<{ asrc?: string; audio_inputs?: unknown[] }>(["streaming", "getConfig"]);
+
+	test("a picker capacity refusal keeps the previous mix editable after the unplugged input returns", async ({
+		page,
+		backendRpc,
+	}) => {
+		expect(await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo })).toMatchObject({
+			success: true,
+		});
+		const attach = (attached: boolean) =>
+			backendRpc.call(["streaming", "setMockDeviceAttached"], {
+				input_id: "audio_elgato_wave3",
+				attached,
+			});
+		await attach(false);
+		const second = stripOf(page, SECOND);
+		await expect(second.getByRole("button", { name: `Remove ${SECOND}` })).toBeVisible();
+
+		// The backend RPC suite exercises a real full roster; this browser fixture has three mics.
+		wire.refuseAudioInputs("audio_inputs_too_many");
+		await pickThird(page);
+		await expect(page.getByText("The mix is full. Turn another input off first.", { exact: true })).toBeVisible();
+		await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+		expect(wire.calls("streaming.setConfig").map(({ input }) => input)).toEqual([
+			{ asrc: THIRD, audio_pick: true },
+		]);
+		wire.refuseAudioInputs(null);
+
+		await attach(true);
+		await expect(second.getByRole("switch")).toBeChecked();
+		const mute = wire.nextAnswer("streaming.setAudioMix");
+		await page.getByTestId(`audio-strip-mute-${MAIN}`).click();
+		expect((await mute).result).toMatchObject({ success: true, applied: { id: MAIN, mute: true } });
+		expect(await savedConfig(backendRpc)).toMatchObject({
+			asrc: MAIN,
+			audio_inputs: [{ ...savedTwo[0], mute: true }, savedTwo[1]],
+		});
+	});
+
+	for (const [refusal, message] of [
+		["audio_inputs_too_many", "The mix is full. Turn another input off first."],
+		["audio_source_unavailable", "The selected audio input is not available."],
+	] as const) {
+		test(`Start waits for the pick and cancels on ${refusal}`, async ({ page, backendRpc }) => {
+			const saved = [savedTwo[0], { ...savedTwo[1], tracks: [1] }];
+			expect(await backendRpc.call(["streaming", "setConfig"], { audio_inputs: saved })).toMatchObject({
+				success: true,
+			});
+			const attach = (attached: boolean) =>
+				backendRpc.call(["streaming", "setMockDeviceAttached"], { input_id: "audio_elgato_wave3", attached });
+			await attach(false);
+			const second = stripOf(page, SECOND);
+			await expect(second.getByRole("button", { name: `Remove ${SECOND}` })).toBeVisible();
+
+			// Capacity admission itself is covered by the backend suite with a full roster.
+			wire.refuseAudioInputs(refusal);
+			const pick = wire.holdAudioPick(THIRD);
+			await pickThird(page);
+			const held = await pick.held;
+			await startButton(page).click();
+			expect(await wire.pageHasReply(held.id)).toBe(false);
+			wire.refuseAudioInputs(null);
+			pick.release();
+
+			await expect(page.getByText(message, { exact: true })).toBeVisible();
+			expect(wire.calls("streaming.start").map(({ input }) => input.asrc)).toEqual([]);
+			await expect(startButton(page)).toBeEnabled();
+			await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+			expect(wire.calls("streaming.setConfig").map(({ input }) => input)).toEqual([{ asrc: THIRD, audio_pick: true }]);
+			expect(await savedConfig(backendRpc)).toMatchObject({ asrc: MAIN, audio_inputs: saved });
+
+			await attach(true);
+			await expect(second.getByRole("switch")).toBeChecked();
+			const mute = wire.nextAnswer("streaming.setAudioMix");
+			await page.getByTestId(`audio-strip-mute-${MAIN}`).click();
+			expect((await mute).result).toMatchObject({ success: true, applied: { id: MAIN, mute: true } });
+			expect(await savedConfig(backendRpc)).toMatchObject({
+				asrc: MAIN,
+				audio_inputs: [{ ...saved[0], mute: true }, saved[1]],
+			});
+		});
+
+		test(`queued Start honors an intermediate ${refusal} even when the third pick saves`, async ({
+			page,
+			backendRpc,
+		}) => {
+			const main = mixEntry(MAIN, [1], -3);
+			await backendRpc.call(["streaming", "setConfig"], { audio_inputs: [main] });
+
+			const first = wire.holdAudioPick(SECOND);
+			await pickDevice(page, /Elgato Wave:3/);
+			const firstReply = await first.held;
+			expect(firstReply.result).toMatchObject({ success: true });
+			await startButton(page).click();
+			await expect(page.getByTestId("live-bar")).toHaveAttribute("data-state", "pending");
+
+			wire.refuseAudioInputs(refusal);
+			const middle = wire.holdAudioPick(THIRD);
+			await pickThird(page);
+			const middleReply = await middle.held;
+			wire.refuseAudioInputs(null);
+
+			const last = wire.holdAudioPick(MAIN);
+			await pickDevice(page, /RØDE AI-Micro/);
+			const lastReply = await last.held;
+			expect(lastReply.result).toMatchObject({ success: true, applied: { asrc: MAIN } });
+			expect(await wire.pageHasReply(firstReply.id)).toBe(false);
+
+			middle.release();
+			await receiveReply(middleReply.id);
+			await expect(page.getByText(message, { exact: true })).toBeVisible();
+			last.release();
+			await receiveReply(lastReply.id);
+			first.release();
+			await receiveReply(firstReply.id);
+
+			await expect.soft(startButton(page)).toBeEnabled();
+			expect(wire.calls("streaming.start").map(({ input }) => input.asrc)).toEqual([]);
+			expect(wire.calls("streaming.setConfig").map(({ input }) => input)).toEqual([
+				{ asrc: SECOND, audio_pick: true },
+				{ asrc: THIRD, audio_pick: true },
+				{ asrc: MAIN, audio_pick: true },
+			]);
+			expect(await savedConfig(backendRpc)).toMatchObject({
+				asrc: MAIN,
+				audio_inputs: [mixEntry(SECOND), main],
+			});
+			await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+		});
+
+		test(`Start launches the new pick after an already shown ${refusal}`, async ({ page, backendRpc }) => {
+			const main = mixEntry(MAIN, [1], -3);
+			await backendRpc.call(["streaming", "setConfig"], { audio_inputs: [main] });
+
+			const first = wire.holdAudioPick(SECOND);
+			await pickDevice(page, /Elgato Wave:3/);
+			const firstReply = await first.held;
+			expect(firstReply.result).toMatchObject({ success: true });
+
+			wire.refuseAudioInputs(refusal);
+			await pickThird(page);
+			await expect(page.getByText(message, { exact: true })).toBeVisible();
+			wire.refuseAudioInputs(null);
+
+			const last = wire.holdAudioPick(MAIN);
+			await pickDevice(page, /RØDE AI-Micro/);
+			const lastReply = await last.held;
+			expect(lastReply.result).toMatchObject({ success: true, applied: { asrc: MAIN } });
+			await expect(page.getByTestId("audio-source-select")).toContainText(MAIN);
+			const start = wire.nextAnswer("streaming.start");
+			await startButton(page).click();
+			await expect(page.getByTestId("live-bar")).toHaveAttribute("data-state", "pending");
+			expect(await wire.pageHasReply(firstReply.id)).toBe(false);
+			expect(wire.calls("streaming.start")).toEqual([]);
+
+			last.release();
+			await receiveReply(lastReply.id);
+			first.release();
+			await receiveReply(firstReply.id);
+
+			expect(await savedConfig(backendRpc)).toMatchObject({ asrc: MAIN, audio_inputs: [mixEntry(SECOND), main] });
+			await expect.soft(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 10_000 });
+			expect(wire.calls("streaming.start").map(({ input }) => input.asrc)).toEqual([MAIN]);
+			expect(await start).toMatchObject({ input: { asrc: MAIN }, result: { success: true } });
+
+			await endAndWait(page);
+			await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+		});
+	}
 
 	async function pickDevice(page: Page, name: RegExp): Promise<void> {
 		await page.getByTestId("audio-source-select").click();
@@ -706,6 +886,80 @@ test.describe("audio mixer — caps-full", () => {
 		});
 	}
 
+	test("an unplugged saved input stays visible while another input is muted and Start succeeds", async ({
+		page,
+		backendRpc,
+		workerBackend,
+	}) => {
+		const secondary = stripOf(page, SECOND);
+		const include = wire.nextAnswer("streaming.setAudioMix");
+		await secondary.getByRole("switch").click();
+		expect((await include).result?.success).toBe(true);
+		await expect(secondary.getByRole("switch")).toBeChecked();
+		const attach = (attached: boolean) =>
+			backendRpc.call(["streaming", "setMockDeviceAttached"], {
+				input_id: "audio_elgato_wave3",
+				attached,
+			});
+		try {
+			await attach(false);
+			await expect(secondary.getByText("Unplugged", { exact: true })).toBeVisible();
+			const remove = secondary.getByRole("button", { name: `Remove ${SECOND}` });
+			await remove.evaluate((button) => button.scrollIntoView({ block: "center" }));
+			await expect(remove).toBeInViewport();
+			await expect(remove).toBeEnabled();
+			const mute = wire.nextAnswer("streaming.setAudioMix");
+			await page.getByTestId(`audio-strip-mute-${MAIN}`).click();
+			expect((await mute).result).toMatchObject({ success: true, applied: { id: MAIN, mute: true } });
+			await pressStart(page);
+			await expect(page.getByTestId("live-cockpit").getByText("Unplugged", { exact: true })).toBeVisible();
+			expect((await workerBackend.mockEngine()).lastStartParams?.audio).toMatchObject({
+				mode: "default",
+				inputs: [{ input_id: "audio_rode_ai_micro", tracks: [1], mute: true }],
+			});
+			await endAndWait(page);
+		} finally {
+			await attach(true);
+			await backendRpc.call(["streaming", "setConfig"], { audio_inputs: null });
+		}
+	});
+
+	test("unplugging the sole saved microphone leaves Start enabled and shows typed recovery", async ({
+		page,
+		backendRpc,
+		workerBackend,
+	}) => {
+		const saved = [{ id: MAIN, tracks: [1], gain_db: -3, mute: false, delay_ms: 0 }];
+		expect(await backendRpc.call(["streaming", "setConfig"], { audio_inputs: saved })).toMatchObject({
+			success: true,
+		});
+		await expect(page.getByTestId(`audio-strip-gain-${MAIN}`).getByRole("slider")).toHaveAttribute("aria-valuenow", "-3");
+		await backendRpc.call(["streaming", "setMockDeviceAttached"], {
+			input_id: "audio_rode_ai_micro",
+			attached: false,
+		});
+		await expect(stripOf(page, MAIN).getByRole("button", { name: `Remove ${MAIN}` })).toBeVisible();
+
+		const button = startButton(page);
+		await expect(button).toBeEnabled();
+		const answer = wire.nextAnswer("streaming.start");
+		await button.click();
+		expect((await answer).result).toMatchObject({
+			success: false,
+			failure: { class: "audio_source_unavailable" },
+		});
+		const recovery = page.locator("[data-sonner-toast]").filter({ hasText: /selected audio input is not available/i });
+		await expect(recovery.getByRole("button", { name: "View logs", exact: true })).toBeVisible();
+		expect(await workerBackend.mockEngine()).toMatchObject({
+			streaming: false,
+			audioInputs: [],
+		});
+		expect(await backendRpc.call(["streaming", "getConfig"])).toMatchObject({
+			asrc: MAIN,
+			audio_inputs: saved,
+		});
+	});
+
 	test("No audio picked over a saved two-input mix: Start sends no audio, the summary says so, and the next microphone pick brings the mix back", async ({
 		page,
 		backendRpc,
@@ -748,7 +1002,46 @@ test.describe("audio mixer — caps-full", () => {
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
 
-	test("Start pressed while the answer to a No audio pick is held sends no audio, and the released answer settles the pick", async ({
+	test("queued Start stays pending through a second pick and sends only the settled selection", async ({
+		page,
+		backendRpc,
+	}) => {
+		const first = wire.holdAudioPick(SECOND);
+		await pickDevice(page, /Elgato Wave:3/);
+		const firstReply = await first.held;
+		const start = wire.nextAnswer("streaming.start");
+		const bar = page.getByTestId("live-bar");
+		await startButton(page).click();
+		await expect(bar).toHaveAttribute("data-state", "pending");
+
+		const second = wire.holdAudioPick(THIRD);
+		await pickThird(page);
+		const secondReply = await second.held;
+		expect(firstReply.result).toMatchObject({ success: true, applied: { asrc: SECOND } });
+		expect(secondReply.result).toMatchObject({ success: true, applied: { asrc: THIRD } });
+		expect(await wire.pageHasReply(firstReply.id)).toBe(false);
+		expect(wire.calls("streaming.start")).toEqual([]);
+
+		first.release();
+		expect((await receiveReply(firstReply.id)).result).toEqual(firstReply.result);
+		expect(await wire.pageHasReply(secondReply.id)).toBe(false);
+		expect(wire.calls("streaming.start")).toEqual([]);
+		await expect.soft(bar, "Start must not go back to Ready while the second pick is held").toHaveAttribute(
+			"data-state",
+			"pending",
+		);
+
+		second.release();
+		expect((await receiveReply(secondReply.id)).result).toEqual(secondReply.result);
+		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 10_000 });
+		expect(await start).toMatchObject({ input: { asrc: THIRD }, result: { success: true } });
+		expect(wire.calls("streaming.start").map(({ input }) => input.asrc)).toEqual([THIRD]);
+
+		await endAndWait(page);
+		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
+	});
+
+	test("Start pressed during a No audio pick waits for its answer, then sends no audio", async ({
 		page,
 		backendRpc,
 		workerBackend,
@@ -759,17 +1052,19 @@ test.describe("audio mixer — caps-full", () => {
 		const save = wire.holdAudioPick("No audio");
 		await chooseAudio(page, "No audio");
 		const held = await save.held;
+		const start = wire.nextAnswer("streaming.start");
 		try {
 			expect(held.input).toEqual({ asrc: "No audio", audio_pick: true });
 			expect(held.result).toMatchObject({ success: true, applied: { asrc: "No audio" } });
-			await pressStart(page);
-			expect((await workerBackend.mockEngine()).lastStartParams?.audio).toEqual({ mode: "none" });
-			// Start was answered while the page's own socket still had no answer to the pick.
+			await startButton(page).click();
 			expect(await wire.pageHasReply(held.id)).toBe(false);
+			expect(wire.calls("streaming.start")).toEqual([]);
 		} finally {
 			save.release();
 		}
 		expect((await receiveReply(held.id)).result).toEqual(held.result);
+		expect(await start).toMatchObject({ input: { asrc: "No audio" }, result: { success: true } });
+		expect((await workerBackend.mockEngine()).lastStartParams?.audio).toEqual({ mode: "none" });
 		const cockpit = page.getByTestId("live-cockpit");
 		await expect(cockpit).toBeVisible({ timeout: 15_000 });
 		await expect(cockpit.locator('[data-live-value="audio"]')).toHaveText("No audio");

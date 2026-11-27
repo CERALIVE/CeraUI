@@ -15,7 +15,9 @@
  */
 import { CONFIG_CLEAR_EVENT } from "@ceraui/rpc/schemas";
 
+import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import { onConfigSave } from "../modules/config-save-listeners.ts";
+import { excludedAudioInputs } from "../modules/streaming/audio-inputs.ts";
 import { broadcastMsg } from "./compat.ts";
 
 let sent = new Set<string>();
@@ -34,12 +36,14 @@ export function rememberConfigSent(config: object): void {
 }
 
 /** Broadcast `config`, then `config_clear` for every key it no longer carries. */
-export function broadcastConfig(config: object): void {
+export function broadcastConfig(config: RuntimeConfig): void {
 	const now = carried(config);
 	const cleared = [...sent].filter((key) => !now.has(key));
 	broadcastMsg("config", config);
 	if (cleared.length > 0) broadcastMsg(CONFIG_CLEAR_EVENT, { keys: cleared });
 	sent = now;
+	if (now.has("audio_inputs") || cleared.includes("audio_inputs"))
+		broadcastMsg("status", { audio_mix_excluded: excludedAudioInputs(config) });
 }
 
 // After the writer's own synchronous broadcast, which leaves nothing to publish.

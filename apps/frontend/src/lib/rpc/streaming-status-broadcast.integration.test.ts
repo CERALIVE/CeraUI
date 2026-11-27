@@ -32,9 +32,13 @@ vi.mock("$lib/rpc/client", () => ({
 	},
 }));
 
+import { dispatchEvidence } from "./session-epoch.svelte";
 import {
 	getIsStreaming,
+	getStatus,
+	ingestPulledStatus,
 	initSubscriptions,
+	receivePulledStatus,
 	resetState,
 } from "./subscriptions.svelte";
 
@@ -77,5 +81,23 @@ describe("backend is_streaming=false broadcast reaches + is consumed (Todo 29 d)
 		// and is still ingested, never left stale.
 		pushStatus(false);
 		expect(getIsStreaming()).toBe(false);
+	});
+
+	it("keeps a held stream-state response admissible across a mixer-only push", async () => {
+		pushStatus(false);
+		const reply = Promise.withResolvers<{ is_streaming: boolean }>();
+		const dispatch = dispatchEvidence();
+		const ingest = reply.promise.then((status) => {
+			const received = receivePulledStatus(status, dispatch);
+			ingestPulledStatus(received.status, received.receipt);
+		});
+
+		const excluded = [{ id: "mic-b", label: "Mic B", reason: "unplugged" }];
+		captured?.("status", { audio_mix_excluded: excluded });
+		reply.resolve({ is_streaming: true });
+		await ingest;
+
+		expect(getIsStreaming()).toBe(true);
+		expect(getStatus()?.audio_mix_excluded).toEqual(excluded);
 	});
 });

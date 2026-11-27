@@ -1,4 +1,3 @@
-import { audioMixWithPrimary } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { getConfig } from "../config.ts";
 import type { ArmedStreamConfig } from "./armed-stream-marker.ts";
@@ -10,7 +9,11 @@ import {
 	NO_AUDIO_ID,
 	refreshBluetoothAudioDevices,
 } from "./audio.ts";
-import { audioInputEngineId, effectiveAudioInputs } from "./audio-inputs.ts";
+import {
+	audioInputEngineId,
+	effectiveAudioInputs,
+	projectLaunchAudioInputs,
+} from "./audio-inputs.ts";
 import { getLastCapabilities } from "./capabilities.ts";
 
 // The audio fields a Start request may save.
@@ -178,7 +181,7 @@ export function resolvePinnedLaunchAudio(
 	}: { readonly audioOff: boolean; readonly embedded: boolean },
 ) {
 	const { asrc, audio_inputs } = config;
-	if (audioOff || audioEvidence.size === 0)
+	if (audioOff)
 		return {
 			ok: true,
 			asrc,
@@ -213,20 +216,19 @@ export function resolvePinnedLaunchAudio(
 	if (mix !== undefined) {
 		// Decide membership before changing any keys: a successor must not
 		// absorb a different leg, including an implicitly inserted primary.
-		const effective =
-			asrc !== undefined && audioEvidence.has(asrc)
-				? audioMixWithPrimary(audio_inputs, asrc, mix.max_inputs)
-				: effectiveAudioInputs(config);
+		const effective = effectiveAudioInputs(
+			config,
+			asrc !== undefined && audioEvidence.has(asrc) ? asrc : undefined,
+		);
 		const projected = { ...config, asrc: primary };
+		inputs = projectLaunchAudioInputs(config, effective ?? [], resolve);
+		if (inputs === undefined) return { ok: false } as const;
 		const engineIds = new Set<string>();
-		inputs = [];
-		for (const input of effective ?? []) {
-			const id = resolve(input.id);
-			if (id === undefined) return { ok: false } as const;
-			const engineId = audioInputEngineId(id, projected);
-			if (engineIds.has(engineId)) return { ok: false } as const;
+		for (const input of inputs) {
+			const engineId = audioInputEngineId(input.id, projected);
+			if (engineId === undefined || engineIds.has(engineId))
+				return { ok: false } as const;
 			engineIds.add(engineId);
-			inputs.push({ ...input, id });
 		}
 	}
 	return {

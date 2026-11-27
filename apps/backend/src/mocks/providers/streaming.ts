@@ -48,6 +48,7 @@ import {
 	deriveAudioSources,
 	getAudioDevices,
 } from "../../modules/streaming/audio.ts";
+import { excludedAudioInputs } from "../../modules/streaming/audio-inputs.ts";
 import {
 	type EngineCapabilitiesSnapshot,
 	getCapabilities,
@@ -538,11 +539,14 @@ export function setMockDeviceAttached(
 		Object.values(scenarioAudioDevices()).some(
 			(cardId) => mockAudioInputId(cardId) === inputId,
 		)
-	)
+	) {
+		const audio_sources = deriveAudioSources();
 		broadcastMsg("status", {
 			asrcs: Object.keys(getAudioDevices()),
-			audio_sources: deriveAudioSources(),
+			audio_sources,
+			audio_mix_excluded: excludedAudioInputs(getConfig(), audio_sources),
 		});
+	}
 }
 
 /**

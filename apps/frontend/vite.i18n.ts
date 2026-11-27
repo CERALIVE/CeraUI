@@ -136,7 +136,47 @@ const PLAIN_BRANCH = new RegExp(
 	"g",
 );
 
-/** Share locale dispatch for argument-free Paraglide literals in the SPA. */
+// Only the pinned compiler's cooked text and one optional property read are safe to move.
+const TEMPLATE_TEXT = String.raw`(?:[^${"`"}\\$\r\n|]|\$(?!\{)|\\(?:[\\${"`"}nrt]|\$(?=\{)))*`;
+const TEMPLATE_RETURN = String.raw`${LOCALIZED_LITERAL}${"`"}(${TEMPLATE_TEXT})\$\{i\?\.([A-Za-z_$][\w$]*)\}(${TEMPLATE_TEXT})${"`"}\)`;
+const TEMPLATE_BRANCH = String.raw`\tif \(locale === "([\w-]+)"\) return ${TEMPLATE_RETURN}\n`;
+const TEMPLATE_MODULE = new RegExp(
+	String.raw`^(?<preamble>(?:${PLAIN_COMMENT})*import \{ getLocale, experimentalStaticLocale \} from '\.\.\/runtime\.js';\s*(?:${PLAIN_COMMENT})*(?<direct>export )?const (?<symbol>[A-Za-z_$][\w$]*) = (?:${PLAIN_COMMENT})?)\(\(i, options = \{\}\) => \{\n\tconst locale = experimentalStaticLocale \?\? options\.locale \?\? getLocale\(\)\n(?<branches>(?:${TEMPLATE_BRANCH})*)(?<fallback>\treturn ${TEMPLATE_RETURN})\n\}\);(?<exports>\nexport \{ \k<symbol> as "[\w.-]+" \})?\n?(?![\s\S])`,
+);
+const TEMPLATE_FALLBACK = new RegExp(String.raw`^\treturn ${TEMPLATE_RETURN}$`);
+const TEMPLATE_BRANCHES = new RegExp(TEMPLATE_BRANCH, "g");
+
+function cookedText(text: string): string {
+	return text.replace(/\\([\\`$nrt])/g, (_match, char: string) => {
+		switch (char) {
+			case "n": return "\n";
+			case "r": return "\r";
+			case "t": return "\t";
+			default: return char;
+		}
+	});
+}
+
+function compactTemplate(source: string): string | null {
+	const module = TEMPLATE_MODULE.exec(source)?.groups;
+	if (!module?.preamble || module.symbol === "templateMessage" ||
+		Boolean(module.direct) === Boolean(module.exports)) return null;
+	const fallback = TEMPLATE_FALLBACK.exec(module.fallback ?? "");
+	if (!fallback) return null;
+	const [, prefix = "", key, suffix = ""] = fallback;
+	if (!key) return null;
+	const translations = new Map<string, readonly [string, string]>();
+	for (const [, locale, before, input, after] of (module.branches ?? "").matchAll(TEMPLATE_BRANCHES)) {
+		if (locale === undefined || !PLAIN_LOCALES.includes(locale) ||
+			translations.has(locale) || input !== key || before === undefined || after === undefined) return null;
+		translations.set(locale, [cookedText(before), cookedText(after)]);
+	}
+	const base = [cookedText(prefix), cookedText(suffix)];
+	const table = [base, ...PLAIN_LOCALES.map((locale) => translations.get(locale) ?? base)].flat().join("|");
+	return `import { templateMessage } from ${JSON.stringify(PLAIN_MESSAGE_RUNTIME)};\n${module.preamble}templateMessage(${JSON.stringify(key)},${JSON.stringify(table)});${module.exports ?? ""}\n`;
+}
+
+/** Share locale dispatch for pinned Paraglide literals and single-read templates in the SPA. */
 export function compactPlainMessages() {
 	return {
 		name: "ceraui:compact-plain-messages",
@@ -148,13 +188,20 @@ export function compactPlainMessages() {
 				return `import { experimentalStaticLocale, getLocale } from ${JSON.stringify(path.join(PARAGLIDE_OUTDIR, "runtime.js"))};
 const locales = ${JSON.stringify(PLAIN_LOCALES)};
 export const plainMessage = (base, messages) => (_inputs, options = {}) =>
-	messages[locales.indexOf(experimentalStaticLocale ?? options.locale ?? getLocale())] ?? base;`;
+	messages[locales.indexOf(experimentalStaticLocale ?? options.locale ?? getLocale())] ?? base;
+export const templateMessage = (key, packed) => {
+	const parts = packed.split("|");
+	return (i, options = {}) => {
+		const index = 2 * (locales.indexOf(experimentalStaticLocale ?? options.locale ?? getLocale()) + 1);
+		return \`\${parts[index]}\${i?.[key]}\${parts[index + 1]}\`;
+	};
+};`;
 			}
 			if (!PER_MESSAGE_MODULE.test(id)) return null;
 			const source = readFileSync(id, "utf8");
 			const match = PLAIN_LOOKUP.exec(source);
 			if (!match?.[1] || !match[2] || !PLAIN_PREAMBLE.test(source.slice(0, match.index)))
-				return null;
+				return compactTemplate(source);
 			const translations = new Map<string, string>();
 			for (const [, locale, message] of match[1].matchAll(PLAIN_BRANCH)) {
 				if (!locale || message === undefined || !PLAIN_LOCALES.includes(locale) || translations.has(locale))

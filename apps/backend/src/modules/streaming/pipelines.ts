@@ -142,8 +142,12 @@ function deriveAudioKind(
 	id: string,
 	supportsAudio: boolean,
 ): PipelineAudioKind {
-	if (GATEWAY_SOURCES[id] !== undefined) return "embedded";
+	if (isNetworkIngestPipeline(id)) return "embedded";
 	return supportsAudio ? "selectable" : "none";
+}
+
+export function isNetworkIngestPipeline(id: string): boolean {
+	return Object.hasOwn(GATEWAY_SOURCES, id);
 }
 
 // The capability contract types resolution/framerate as free-form string/number;

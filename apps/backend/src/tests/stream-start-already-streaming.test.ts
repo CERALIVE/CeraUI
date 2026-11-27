@@ -10,6 +10,7 @@ import {
 } from "@ceralive/cerastream";
 import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import { ENGINE_STATE_RECONCILE_TIMEOUT } from "../helpers/timing-constants.ts";
+import { setMockAudioDevicesProvider } from "../modules/streaming/audio.ts";
 import {
 	clearCapabilitiesCache,
 	getCapabilities,
@@ -36,6 +37,7 @@ const harness = (schemaVersion?: string) => {
 };
 afterEach(() => {
 	for (const h of fixtures.splice(0)) h.dispose();
+	setMockAudioDevicesProvider(undefined);
 	clearCapabilitiesCache();
 });
 
@@ -152,6 +154,10 @@ test.each([
 	"%s leaves a different configuration live and preserves its refusal",
 	async (_label, dataCode, config) => {
 		if (dataCode === audioMissing) {
+			// The picker can list a device that the engine then cannot open.
+			setMockAudioDevicesProvider(() => ({
+				"missing-mic": "hw:CARD=missing-mic",
+			}));
 			await getCapabilities({
 				fetchEngineCapabilities: async () => ({
 					schemaVersion: SCHEMA_VERSION,

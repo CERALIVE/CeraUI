@@ -17,6 +17,7 @@
 
 import type {
 	ActiveEncode,
+	AudioMixExcludedInput,
 	AudioSource,
 	BondMapping,
 	BufferingStatus,
@@ -41,6 +42,7 @@ import { getUnclaimedAdapters } from "../network/unclaimed-adapters.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { getActiveEncodeStatus } from "../streaming/active-encode-status.ts";
 import { deriveAudioSources, getAudioDevices } from "../streaming/audio.ts";
+import { excludedAudioInputs } from "../streaming/audio-inputs.ts";
 import {
 	getAudioMixActive,
 	getAudioOffActive,
@@ -82,6 +84,7 @@ import { buildMsg } from "./websocket-server.ts";
 export type StatusResponseMessage = {
 	is_streaming?: ReturnType<typeof getIsStreaming>;
 	audio_mix_active?: boolean;
+	audio_mix_excluded?: AudioMixExcludedInput[];
 	audio_off_active?: boolean | undefined;
 	stream_lifecycle?: ReturnType<typeof getStreamLifecycleState>;
 	available_updates?: ReturnType<typeof getAvailableUpdates>;
@@ -121,6 +124,7 @@ export function sendStatus(conn: WebSocket) {
 		buildMsg("status", {
 			is_streaming: getIsStreaming(),
 			audio_mix_active: getAudioMixActive(),
+			audio_mix_excluded: excludedAudioInputs(getConfig()),
 			audio_off_active: getAudioOffActive(),
 			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),

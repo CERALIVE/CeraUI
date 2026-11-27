@@ -86,6 +86,10 @@ type Delta = Omit<SetAudioMixInput, 'id'>;
 
 const mix = $derived(capabilities?.audio_mix);
 const status = $derived(getStatus());
+const excluded = $derived(status?.audio_mix_excluded?.filter(
+	(row) => config?.audio_inputs?.some(({ id }) => id === row.id),
+) ?? []);
+const isExcluded = (id: string) => excluded.some((row) => row.id === id);
 const mixLive = $derived(isStreaming && status?.audio_mix_active === true);
 const liveEpoch = $derived(mixLive ? getStreamSessionEpoch() : undefined);
 // Live without a mix, level, mute and delay wait for the next start too.
@@ -117,9 +121,9 @@ const primaryId = $derived.by(() => {
 
 const strips = $derived.by(() => {
 	const devices = resolveAudioSourceList(status?.audio_sources, status?.asrcs ?? [])
-		.filter((source) => source.kind === 'device' && source.unavailable_reason === undefined)
+		.filter((source) => source.kind === 'device' && source.unavailable_reason === undefined && !isExcluded(source.id))
 		.map((source) => ({ id: source.id, label: audioSourceLabel(source, t) }));
-	return embeddedId === undefined
+	return embeddedId === undefined || isExcluded(embeddedId)
 		? devices
 		: [{ id: embeddedId, label: m['live.source.audioEmbedded']() }, ...devices];
 });
@@ -149,7 +153,11 @@ function withTrack(entry: AudioInputSetting, number: number, on: boolean): Audio
 
 const inputs = $derived.by(() => {
 	let entries =
-		audioMixWithPrimary(config?.audio_inputs, hasPrimary ? primaryId : undefined, mix?.max_inputs ?? 0) ??
+		audioMixWithPrimary(
+			config?.audio_inputs?.filter(({ id }) => !isExcluded(id)),
+			hasPrimary ? primaryId : undefined,
+			mix?.max_inputs ?? 0,
+		) ??
 		(hasPrimary && primaryId !== undefined ? [defaults(primaryId)] : [])
 	if (isStreaming) return entries;
 	// Rebase only outstanding membership and track changes on the newest saved mix.
@@ -224,18 +232,16 @@ $effect.pre(() => {
 	};
 });
 
-function shown(id: string): AudioInputSetting {
-	const entry = { ...entryFor(id) };
-	for (const field of VALUE_FIELDS) {
-		const applied = appliedValues.get(fieldKey(id, field));
-		if (applied !== undefined && applied.epoch === liveEpoch) Object.assign(entry, applied.values);
-	}
-	return entry;
-}
-
-function pendingDelta(id: string, field: ValueField): Delta | undefined {
+function pendingDelta(id: string, field: Field): Delta | undefined {
 	const intent = intents.get(fieldKey(id, field));
 	return intent !== undefined && intent.epoch === liveEpoch ? intent.delta : undefined;
+}
+
+function shown<FieldName extends ValueField>(id: string, field: FieldName): Values[FieldName] {
+	const applied = appliedValues.get(fieldKey(id, field));
+	return pendingDelta(id, field)?.[field]
+		?? (applied && applied.epoch === liveEpoch ? applied.values[field] : undefined)
+		?? entryFor(id)[field];
 }
 
 function setError(id: string, field: Field, token: string | undefined): void {
@@ -251,30 +257,29 @@ function fieldDescription(id: string, field: Field, fallback?: string): string |
 
 const fieldErrorId = (id: string, field: Field) => `${uid}-error-${encodeURIComponent(id)}-${field}`;
 
-const ERROR_COPY: Record<string, () => string> = {
-	audio_mix_unsupported: () => m['live.audioMixer.error.audio_mix_unsupported'](),
-	audio_input_unknown: () => m['live.audioMixer.error.audio_input_unknown'](),
-	audio_input_primary: () => m['live.audioMixer.error.audio_input_primary'](),
-	audio_inputs_empty: () => m['live.audioMixer.error.audio_inputs_empty'](),
-	audio_input_duplicate: () => m['live.audioMixer.error.audio_input_duplicate'](),
-	audio_inputs_too_many: () => m['live.audioMixer.error.audio_inputs_too_many'](),
-	audio_tracks_invalid: () => m['live.audioMixer.error.audio_tracks_invalid'](),
-	audio_tracks_gap: () => m['live.audioMixer.error.audio_tracks_gap'](),
-	audio_gain_range: () =>
-		m['live.audioMixer.error.audio_gain_range']({
-			min: mix?.gain_db_min ?? 0,
-			max: mix?.gain_db_max ?? 0,
-		}),
-	audio_delay_range: () =>
-		m['live.audioMixer.error.audio_delay_range']({ max: mix?.delay_ms_max ?? 0 }),
-	[SAVE_FAILED]: () => m['notifications.saveFailed'](),
-};
-
-// An unmapped token is an engine refusal: honest generic copy, never the token.
 function errorCopy(token: string): string {
-	return Object.hasOwn(ERROR_COPY, token)
-		? (ERROR_COPY[token] as () => string)()
-		: m['live.audioMixer.error.refused']();
+	switch (token) {
+		case 'audio_mix_unsupported':
+		case 'audio_input_unknown':
+		case 'audio_input_primary':
+		case 'audio_inputs_empty':
+		case 'audio_input_duplicate':
+		case 'audio_inputs_too_many':
+		case 'audio_tracks_invalid':
+		case 'audio_tracks_gap':
+			return m[`live.audioMixer.error.${token}`]();
+		case 'audio_gain_range':
+			return m['live.audioMixer.error.audio_gain_range']({
+				min: mix?.gain_db_min ?? 0,
+				max: mix?.gain_db_max ?? 0,
+			});
+		case 'audio_delay_range':
+			return m['live.audioMixer.error.audio_delay_range']({ max: mix?.delay_ms_max ?? 0 });
+		case SAVE_FAILED:
+			return m['notifications.saveFailed']();
+		default:
+			return m['live.audioMixer.error.refused']();
+	}
 }
 
 // The backend's track rule, in its order: every input needs distinct tracks
@@ -344,11 +349,15 @@ function toggleInput(id: string, on: boolean): void {
 function toggleTrack(id: string, track: number): void {
 	if (isStreaming) return;
 	const on = !entryFor(id).tracks.includes(track);
-	const next = inputs.map((entry) => entry.id === id ? withTrack(entry, track, on) : entry);
-	const refusal = tracksError(next);
-	if (refusal !== undefined) {
-		setError(id, track, refusal);
-		return;
+	// With an excluded leg the backend knows which gaps predate this edit.
+	if (!excluded.length) {
+		const refusal = tracksError(
+			inputs.map((entry) => entry.id === id ? withTrack(entry, track, on) : entry),
+		);
+		if (refusal !== undefined) {
+			setError(id, track, refusal);
+			return;
+		}
 	}
 	void edit(id, track, { track: { number: track, on } });
 }
@@ -428,7 +437,7 @@ function commitGain(id: string, value: number): void {
 		return;
 	}
 	dropDraft(id);
-	if (value !== (pendingDelta(id, 'gain_db')?.gain_db ?? shown(id).gain_db))
+	if (value !== shown(id, 'gain_db'))
 		void edit(id, 'gain_db', { gain_db: value });
 }
 
@@ -439,7 +448,7 @@ function resetGain(id: string): void {
 
 function toggleMute(id: string): void {
 	if (valuesLocked) return;
-	const mute = !(pendingDelta(id, 'mute')?.mute ?? shown(id).mute);
+	const mute = !shown(id, 'mute');
 	void edit(id, 'mute', { mute });
 }
 
@@ -450,7 +459,7 @@ function changeDelay(id: string, field: HTMLInputElement): void {
 	const max = mix?.delay_ms_max ?? 0;
 	if (raw === '' || !Number.isInteger(value) || value < 0 || value > max) {
 		setError(id, 'delay_ms', 'audio_delay_range');
-		field.value = String(pendingDelta(id, 'delay_ms')?.delay_ms ?? shown(id).delay_ms);
+		field.value = String(shown(id, 'delay_ms'));
 		return;
 	}
 	void edit(id, 'delay_ms', { delay_ms: value });
@@ -490,31 +499,25 @@ const headingId = `${uid}-heading`;
 		{/if}
 
 		<ul aria-labelledby={headingId} class="divide-y border-y">
-			{#each strips as strip, index (strip.id)}
+			{#each [...strips, ...excluded] as strip, index (strip.id)}
+				{const unavailable = $derived('reason' in strip ? strip.reason : undefined)}
 				{const isPrimary = $derived(strip.id === primaryId)}
 				{const enabled = $derived(isEnabled(strip.id))}
-				{const values = $derived(shown(strip.id))}
-				{const gain = $derived(gainDraft[strip.id] ?? pendingDelta(strip.id, 'gain_db')?.gain_db ?? values.gain_db)}
-				{const muted = $derived(pendingDelta(strip.id, 'mute')?.mute ?? values.mute)}
-				{const delay = $derived(pendingDelta(strip.id, 'delay_ms')?.delay_ms ?? values.delay_ms)}
-				{const reading = $derived(levelOf(strip.id))}
 				{const reasonId = `${uid}-reason-${index}`}
-				{const reason = $derived(
-					isPrimary
-						? m['live.audioMixer.primary']()
-						: enabled || isStreaming
-							? undefined
-							: !hasPrimary
-								? m['live.audioMixer.needsPrimary']()
-								: full
-									? errorCopy('audio_inputs_too_many')
-									: undefined,
-				)}
+				{const reason = $derived.by(() => {
+					if (unavailable === 'unplugged') return m['live.audioMixer.unplugged']();
+					if (unavailable) return m['live.audioMixer.otherSource']({ source: strip.label });
+					if (isPrimary) return m['live.audioMixer.primary']();
+					if (enabled || isStreaming) return undefined;
+					if (!hasPrimary) return m['live.audioMixer.needsPrimary']();
+					return full ? errorCopy('audio_inputs_too_many') : undefined;
+				})}
 				{const describedBy = $derived(
-					[reason === undefined ? undefined : reasonId, isStreaming ? nextStartId : undefined]
-						.filter(Boolean)
-						.join(' ') || undefined,
+					reason === undefined
+						? (isStreaming ? nextStartId : undefined)
+						: (isStreaming ? `${reasonId} ${nextStartId}` : reasonId),
 				)}
+				{const includeDescription = $derived(fieldDescription(strip.id, 'include', describedBy))}
 				<li
 					class="space-y-3 py-3"
 					data-audio-strip={strip.id}
@@ -539,17 +542,32 @@ const headingId = `${uid}-heading`;
 								</p>
 							{/if}
 						</div>
-						<Switch
-							aria-describedby={fieldDescription(strip.id, 'include', describedBy)}
-							aria-label={m['live.audioMixer.enable']({ name: strip.label })}
-							checked={enabled}
-							data-testid={`audio-strip-enable-${strip.id}`}
-							disabled={isPrimary || isStreaming || (!enabled && (!hasPrimary || full))}
-							onCheckedChange={(on) => toggleInput(strip.id, on)}
-						/>
+						{#if unavailable}
+							{const removeLabel = $derived(m['live.audioMixer.remove']())}
+							<Button
+								aria-describedby={includeDescription}
+								aria-label={`${removeLabel} ${strip.label}`}
+								class="min-h-(--touch-target-min) min-w-(--touch-target-min)"
+								disabled={pendingDelta(strip.id, 'include') !== undefined}
+								onclick={() => void edit(strip.id, 'include', { include: false })}
+								size="sm"
+								variant="outline"
+							>
+								{removeLabel}
+							</Button>
+						{:else}
+							<Switch
+								aria-describedby={includeDescription}
+								aria-label={m['live.audioMixer.enable']({ name: strip.label })}
+								checked={enabled}
+								data-testid={`audio-strip-enable-${strip.id}`}
+								disabled={isPrimary || isStreaming || (!enabled && (!hasPrimary || full))}
+								onCheckedChange={(on) => toggleInput(strip.id, on)}
+							/>
+						{/if}
 					</div>
 
-					{#if !isStreaming}
+					{#if !unavailable && !isStreaming}
 						{#if isPrimary}
 							<LiveAudioMeter />
 						{:else}
@@ -557,7 +575,8 @@ const headingId = `${uid}-heading`;
 								{m['live.audioMixer.meterWhenLive']()}
 							</p>
 						{/if}
-					{:else if mixLive && enabled}
+					{:else if !unavailable && mixLive && enabled}
+						{const reading = $derived(levelOf(strip.id))}
 						<AudioLevelMeter
 							peakDb={reading?.peak_db ?? []}
 							rmsDb={reading?.rms_db ?? []}
@@ -565,7 +584,9 @@ const headingId = `${uid}-heading`;
 						/>
 					{/if}
 
-					{#if enabled}
+					{#if !unavailable && enabled}
+						{const gain = $derived(gainDraft[strip.id] ?? shown(strip.id, 'gain_db'))}
+						{const muted = $derived(shown(strip.id, 'mute'))}
 						<div class="flex items-center gap-3">
 							<span class="text-muted-foreground w-10 shrink-0 text-xs font-medium">
 								{m['live.audioMixer.gain']()}
@@ -644,7 +665,7 @@ const headingId = `${uid}-heading`;
 									onchange={(event) => changeDelay(strip.id, event.currentTarget)}
 									step={DELAY_STEP_MS}
 									type="number"
-									value={delay}
+									value={shown(strip.id, 'delay_ms')}
 								/>
 								<span class="text-muted-foreground font-mono text-xs" aria-hidden="true">ms</span>
 							</div>
@@ -657,7 +678,7 @@ const headingId = `${uid}-heading`;
 									{m['live.audioMixer.tracks']()}
 								</span>
 								{#each Array.from({ length: mix.max_tracks }, (_, i) => i + 1) as track (track)}
-									{const on = $derived(values.tracks.includes(track))}
+									{const on = $derived(entryFor(strip.id).tracks.includes(track))}
 									<Button
 										aria-describedby={fieldDescription(strip.id, track, isStreaming ? nextStartId : undefined)}
 										aria-label={m['live.audioMixer.track']({ n: track })}

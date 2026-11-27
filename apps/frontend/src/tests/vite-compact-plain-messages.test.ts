@@ -22,6 +22,8 @@ import {
 const messages = join(PARAGLIDE_OUTDIR, "messages");
 const spaRuntime = join(PARAGLIDE_OUTDIR, "runtime.js");
 const literal = join(messages, "live_adjustbitrate1.js");
+const interpolated = join(messages, "live_golive_autoselected2.js");
+const autoSelected = "live.goLive.autoSelected";
 const locales = [
 	"en",
 	"ar",
@@ -116,15 +118,36 @@ async function bundle(
 		throw new Error("Incomplete ESM output");
 	setLocale(() => "de");
 	const messageModules: readonly unknown[] = modules;
-	return { emitted, compacted, modules: messageModules };
+	return {
+		emitted,
+		compacted,
+		modules: messageModules,
+		setLocale: (getLocale: () => string) => setLocale(getLocale),
+	};
 }
 
-function render(module: unknown, key: string, locale?: string) {
+function invoke(
+	module: unknown,
+	key: string,
+	inputs: unknown,
+	options: unknown,
+): unknown {
 	const message = binding(module, key);
 	if (typeof message !== "function")
 		throw new Error(`Missing message export ${key}`);
-	const value: unknown = message(
-		{},
+	return message(inputs, options);
+}
+
+function render(
+	module: unknown,
+	key: string,
+	locale?: string,
+	inputs: unknown = {},
+) {
+	const value = invoke(
+		module,
+		key,
+		inputs,
 		locale === undefined ? undefined : { locale },
 	);
 	if (typeof value !== "string")
@@ -159,25 +182,42 @@ it("delivers the shared production runtime and preserves every compacted catalog
 		const after = await bundle(join(dir, "production"), paths, [plugin]);
 		expect(after.emitted.has(sharedRuntime)).toBe(true);
 		expect(after.compacted.has(literal)).toBe(true);
+		expect(after.compacted.has(interpolated)).toBe(true);
 		let checked = 0;
 		const mismatches: string[] = [];
+		const namedInputs = new Proxy(
+			{},
+			{
+				get(_target, key) {
+					return `⟨${String(key)}⟩`;
+				},
+			},
+		);
 		for (const [index, path] of paths.entries()) {
 			if (!after.compacted.has(path)) continue;
 			const original: unknown = before.modules[index];
 			const rewritten: unknown = after.modules[index];
 			if (typeof original !== "object" || original === null)
 				throw new Error(`Missing compiled module ${path}`);
+			if (typeof rewritten !== "object" || rewritten === null)
+				throw new Error(`Missing rewritten module ${path}`);
+			expect(Object.keys(rewritten)).toEqual(Object.keys(original));
 			for (const key of Object.keys(original)) {
 				for (const locale of [...locales, undefined]) {
 					if (render(rewritten, key, locale) !== render(original, key, locale))
 						mismatches.push([key, locale].join(":"));
-					checked++;
+					if (
+						render(rewritten, key, locale, namedInputs) !==
+						render(original, key, locale, namedInputs)
+					)
+						mismatches.push([key, locale, "provided input"].join(":"));
+					checked += 2;
 				}
 			}
 		}
 		expect(mismatches).toEqual([]);
 		console.info(
-			`Literal parity: ${after.compacted.size} modules, ${checked} rendered comparisons`,
+			`Production ESM parity: ${after.compacted.size} modules, ${checked} rendered comparisons`,
 		);
 	});
 }, 90_000);
@@ -210,7 +250,14 @@ it("preserves real Paraglide dollar literals and locale precedence in executable
 			const entries = dollars.map((message) => [message.key, message[locale]]);
 			writeFileSync(
 				join(catalogs, `${locale}.json`),
-				JSON.stringify(Object.fromEntries(entries)),
+				JSON.stringify({
+					...Object.fromEntries(entries),
+					single: {
+						en: "English {name}",
+						de: "Deutsch {name}",
+						ja: "{name} の日本語",
+					}[locale],
+				}),
 			);
 		}
 		const compileOptions = {
@@ -256,19 +303,20 @@ it("preserves real Paraglide dollar literals and locale precedence in executable
 			...compileOptions,
 			experimentalStaticLocale: '"ja"',
 		});
+		const staticPaths = [...paths, join(output, "messages", "single.js")];
 		const before = await bundle(
 			join(dir, "static-original"),
-			paths,
+			staticPaths,
 			[],
 			runtime,
 		);
 		const after = await bundle(
 			join(dir, "static-production"),
-			paths,
+			staticPaths,
 			[plugin],
 			runtime,
 		);
-		expect(after.compacted).toEqual(new Set(paths));
+		expect(after.compacted).toEqual(new Set(staticPaths));
 		for (const [index, { key, ja }] of dollars.entries()) {
 			for (const locale of [undefined, "en"]) {
 				expect(render(before.modules[index], key, locale)).toBe(ja);
@@ -278,13 +326,211 @@ it("preserves real Paraglide dollar literals and locale precedence in executable
 				).toBe(ja);
 			}
 		}
+		for (const output of [before, after]) {
+			const options = {
+				get locale(): never {
+					throw new Error("static locale must win");
+				},
+			};
+			output.setLocale(() => {
+				throw new Error("static locale must win");
+			});
+			expect(
+				invoke(
+					output.modules[dollars.length],
+					"single",
+					{ name: "USB" },
+					options,
+				),
+			).toBe("USB の日本語");
+		}
 	});
 }, 90_000);
 
-it("leaves parameterized messages to the normal loader", () => {
+it("preserves escaped text, fallback order, getter order and native interpolation in ESM", async () => {
+	await withScratch(async (dir) => {
+		const path = join(dir, "packages/i18n/src/paraglide/messages/escape.js");
+		mkdirSync(join(path, ".."), { recursive: true });
+		// Match the generator's spelling, including the escaped opening of a literal ${...}.
+		const escaped = `"[\\\\] \\${"`"} \\${"${literal}"} $$ $& $1`;
+		const original = readFileSync(interpolated, "utf8");
+		const source = original
+			.replace(
+				`\`Auto-selected: \${i?.name}\``,
+				() => `\`${escaped} \${i?.name} end\``,
+			)
+			.replace(
+				`\`اختيار تلقائي: \${i?.name}\``,
+				() => `\`قبل \${i?.name} بعد ${escaped}\``,
+			)
+			// A known locale without a present branch must also use the fallback.
+			.replace(/^\tif \(locale === "zh"\).*[\n]/m, "");
+		// Resolve all copies of the runtime to the same instance in the fixture bundle.
+		const runtime = join(path, "../../runtime.js");
+		cpSync(spaRuntime, runtime);
+		writeFileSync(path, source);
+		const before = await bundle(join(dir, "original"), [path], [], runtime);
+		const after = await bundle(
+			join(dir, "production"),
+			[path],
+			[await productionPlugin()],
+			runtime,
+		);
+		expect(after.compacted.has(path)).toBe(true);
+		const visible = `"[\\] \` \${literal} $$ $& $1`;
+		for (const output of [before, after]) {
+			const module = output.modules[0];
+			expect(
+				invoke(module, autoSelected, { name: "" }, { locale: "unknown" }),
+			).toBe(`${visible}  end`);
+			expect(invoke(module, autoSelected, { name: "" }, { locale: "zh" })).toBe(
+				`${visible}  end`,
+			);
+			expect(invoke(module, autoSelected, undefined, {})).toBe(
+				"Automatisch ausgewählt: undefined",
+			);
+			expect(invoke(module, autoSelected, null, { locale: "ar" })).toBe(
+				`قبل undefined بعد ${visible}`,
+			);
+			for (const name of [0, false, null, undefined]) {
+				expect(invoke(module, autoSelected, { name }, { locale: "ar" })).toBe(
+					`قبل ${name} بعد ${visible}`,
+				);
+			}
+			const seen: string[] = [];
+			output.setLocale(() => {
+				seen.push("current");
+				return "ar";
+			});
+			const options = {
+				get locale() {
+					seen.push("explicit");
+					return undefined;
+				},
+			};
+			const inputs = {
+				get name() {
+					seen.push("input");
+					return {
+						[Symbol.toPrimitive](hint: string) {
+							seen.push(hint);
+							return "USB";
+						},
+					};
+				},
+			};
+			expect(invoke(module, autoSelected, inputs, options)).toBe(
+				`قبل USB بعد ${visible}`,
+			);
+			expect(seen).toEqual(["explicit", "current", "input", "string"]);
+			seen.length = 0;
+			const explicit = {
+				get locale() {
+					seen.push("explicit");
+					return "de";
+				},
+			};
+			expect(invoke(module, autoSelected, inputs, explicit)).toBe(
+				"Automatisch ausgewählt: USB",
+			);
+			expect(seen).toEqual(["explicit", "input", "string"]);
+			expect(() =>
+				invoke(
+					module,
+					autoSelected,
+					{ name: Symbol("native error") },
+					{ locale: "de" },
+				),
+			).toThrow(TypeError);
+			expect(() => invoke(module, autoSelected, {}, null)).toThrow(TypeError);
+			const failure = new RangeError("input conversion failed");
+			expect(() =>
+				invoke(
+					module,
+					autoSelected,
+					{
+						name: {
+							toString() {
+								throw failure;
+							},
+						},
+					},
+					{},
+				),
+			).toThrow(failure);
+		}
+	});
+}, 90_000);
+
+it.each([
+	["different input", `\${i?.name}\`)`, `\${i?.other}\`)`],
+	[
+		"fallback drifts",
+		`\`Auto-selected: \${i?.name}\``,
+		`\`Auto-selected: \${i?.other}\``,
+	],
+	["repeated input", `\${i?.name}\`)`, `\${i?.name}\${i?.name}\`)`],
+	["extra expression", `\${i?.name}\`)`, `\${i?.name ?? "USB"}\`)`],
+	["unsupported escape", `\${i?.name}\`)`, `\\x41\${i?.name}\`)`],
+	["reserved table delimiter", `\${i?.name}\`)`, `|\${i?.name}\`)`],
+	["branch predicate", 'locale === "ar"', 'locale === "ar" || locale === "de"'],
+	["unknown locale", 'locale === "ar"', 'locale === "xx"'],
+	["duplicate locale", 'locale === "ar"', 'locale === "de"'],
+	[
+		"alternate runtime import",
+		"from '../runtime.js'",
+		"from '../alternate.js'",
+	],
+	[
+		"alternate runtime alias",
+		"getLocale, experimentalStaticLocale",
+		"getLocale as other, experimentalStaticLocale",
+	],
+	[
+		"extra export",
+		'as "live.goLive.autoSelected" }',
+		'as "live.goLive.autoSelected" }\nexport const extra = 42;',
+	],
+])("declines unsupported interpolation: %s", async (_case, from, to) => {
+	await withScratch((dir) => {
+		const original = readFileSync(interpolated, "utf8");
+		const changed = original.replace(from, () => to);
+		if (original === changed)
+			throw new Error(`Missing drift fixture anchor: ${from}`);
+		const path = join(dir, "packages/i18n/src/paraglide/messages/drift.js");
+		mkdirSync(join(path, ".."), { recursive: true });
+		writeFileSync(path, changed);
+		expect(compactPlainMessages().load(path)).toBeNull();
+	});
+});
+
+it("leaves a real generated plural to the normal loader", () => {
 	expect(
-		compactPlainMessages().load(join(messages, "live_golive_autoselected2.js")),
+		compactPlainMessages().load(join(messages, "live_bar_blockercount1.js")),
 	).toBeNull();
+});
+
+it("does not register SPA compaction in development or federation", async () => {
+	const development = await resolveConfig(
+		{ configFile: spaConfig, mode: "development" },
+		"serve",
+	);
+	const federation = await resolveConfig(
+		{
+			configFile: fileURLToPath(
+				new URL("../../vite.federation.config.ts", import.meta.url),
+			),
+			mode: "production",
+		},
+		"build",
+	);
+	for (const config of [development, federation]) {
+		expect(
+			config.plugins.some(
+				(plugin) => plugin.name === compactPlainMessages().name,
+			),
+		).toBe(false);
+	}
 });
 
 for (const drift of [
