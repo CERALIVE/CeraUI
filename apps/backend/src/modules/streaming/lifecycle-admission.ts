@@ -44,7 +44,7 @@ import type { ModemMutationRefusal } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
 import { noteStartLeaseEnded } from "../system/idle-state.ts";
 
-import { isRecoveryPending } from "./recovery-barrier.ts";
+import { recoveryAdmissionPending } from "./recovery-barrier.ts";
 
 export const LIFECYCLE_HOLDERS = ["streaming", "modem-transition"] as const;
 export type LifecycleHolder = (typeof LIFECYCLE_HOLDERS)[number];
@@ -250,7 +250,7 @@ let nextMutationToken = 0;
 export function tryAcquireModemMutation(
 	stableKey: string,
 ): ModemMutationAdmission {
-	if (isRecoveryPending()) {
+	if (recoveryAdmissionPending()) {
 		return { admitted: false, refusal: "recovery_pending" };
 	}
 	const block = mutationBlocks.get(stableKey);

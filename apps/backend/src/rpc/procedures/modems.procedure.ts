@@ -120,7 +120,7 @@ import {
 	respondModemUssd,
 } from "../../modules/modems/ussd.ts";
 import { withModemUpdateLock } from "../../modules/network/state/device-lock.ts";
-import { isRecoveryPending } from "../../modules/streaming/recovery-barrier.ts";
+import { recoveryAdmissionPending } from "../../modules/streaming/recovery-barrier.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { isRealDevice } from "../../modules/system/device-detection.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -608,7 +608,7 @@ export const listMutationBlocksProcedure = authedProcedure
 	.output(modemMutationListOutputSchema)
 	.handler(async () => {
 		const blocks = await operatorMutationBlocks();
-		return { replayComplete: !isRecoveryPending(), blocks: [...blocks] };
+		return { replayComplete: !recoveryAdmissionPending(), blocks: [...blocks] };
 	});
 
 /**

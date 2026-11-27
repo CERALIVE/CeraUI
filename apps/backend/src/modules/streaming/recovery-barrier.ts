@@ -54,6 +54,7 @@ let lower: (() => void) | undefined;
  * before the replay they belong to.
  */
 export interface RecoveryRetryOwner {
+	verifyAdmission?(): boolean;
 	schedule(): void;
 	cancel(): void;
 }
@@ -101,8 +102,16 @@ export function isRecoveryPending(): boolean {
 	return pending;
 }
 
+/** The installed reader can detect retained-evidence drift after replay. */
+export function recoveryAdmissionPending(): boolean {
+	if (!pending && retryOwner?.verifyAdmission?.() === false)
+		beginRecoveryBarrier();
+	return pending;
+}
+
 /** Resolves once replay has finished. Resolves immediately when none is running. */
 export function awaitRecoveryBarrier(): Promise<void> {
+	recoveryAdmissionPending();
 	return settled;
 }
 

@@ -19,7 +19,10 @@ import {
 	initialOtaStreamLiveness,
 	setOtaStreamingMarker,
 } from "./ota-streaming-marker.ts";
-import { awaitRecoveryBarrier, isRecoveryPending } from "./recovery-barrier.ts";
+import {
+	awaitRecoveryBarrier,
+	recoveryAdmissionPending,
+} from "./recovery-barrier.ts";
 import { newAttemptId } from "./start-failure-taxonomy.ts";
 import {
 	getStreamLifecycleState,
@@ -114,7 +117,7 @@ export const streamSessionProductionDeps: StreamSessionOrchestratorDeps = {
 	},
 	admitLifecycle: () => tryAcquireLifecycle("streaming"),
 	awaitRecovery: awaitRecoveryBarrier,
-	recoveryPending: isRecoveryPending,
+	recoveryPending: recoveryAdmissionPending,
 	blockingMutation: streamingBlockingMutation,
 	admitUpdate: admitAndPrepareStreamStart,
 	markStreamingForOta: setOtaStreamingMarker,

@@ -62,6 +62,7 @@ import {
 	readStoredStateFile,
 	STORED_STATE_LIMITS,
 } from "../system/update-orchestrator/stored-state-file.ts";
+import { retainedStageIsUnreadable } from "./mutation-damaged-storage.ts";
 import {
 	mutationSlotName,
 	parseMutationJournalEntry as parseEntry,
@@ -203,6 +204,10 @@ export function resetMutationJournalDeps(): void {
 	resetPendingMutationRemovals();
 }
 
+export function mutationJournalDeps(): MutationJournalDeps {
+	return activeDeps;
+}
+
 export { mutationSlotName };
 
 function slotFile(stableKey: string): string {
@@ -281,6 +286,16 @@ export async function listMutationEntries(
 	const entries: ModemMutationEntry[] = [];
 	for (const name of names) {
 		if (!name.endsWith(".json")) continue;
+		const retainedUnreadable = retainedStageIsUnreadable(deps.dir, name);
+		if (retainedUnreadable !== undefined) {
+			if (retainedUnreadable) {
+				noteMutationJournalReadFault();
+				if (onUnreadable === undefined)
+					throw new MutationJournalInventoryError(name);
+				onUnreadable(name);
+			}
+			continue;
+		}
 		let entry: ModemMutationEntry | undefined;
 		try {
 			const raw = await deps.fs.readText(join(deps.dir, name));
