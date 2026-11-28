@@ -47,7 +47,11 @@ import {
 	NO_AUDIO_ID,
 	refreshBluetoothAudioDevices,
 } from "../audio.ts";
-import { audioInputEngineId, effectiveAudioInputs } from "../audio-inputs.ts";
+import {
+	audioInputEngineId,
+	effectiveAudioInputs,
+	unavailableAudioRoute,
+} from "../audio-inputs.ts";
 import {
 	defaultBindMapSpawnDeps,
 	resolveBindMapArgs,
@@ -70,10 +74,6 @@ import type { Pipeline } from "../pipelines.ts";
 import { replayPreviewEncodeMode } from "../preview-encode-replay.ts";
 import { getLastPublishedBond } from "../srtla.ts";
 import { resolvePinnedLaunchAudio, type StartAudio } from "../start-audio.ts";
-import {
-	StreamStartFailure,
-	typedStartFailure,
-} from "../start-failure-taxonomy.ts";
 import { assertStreamLaunchOwnership } from "../stream-launch-ownership.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
@@ -176,7 +176,12 @@ export async function maybeProbeAudioSource(
  */
 const autoLaunches = new WeakMap<StartAudio, ReturnType<typeof launchAudio>>();
 
-function launchAudio(config: RuntimeConfig, startAudio: StartAudio) {
+function launchAudio(
+	config: RuntimeConfig,
+	startAudio: StartAudio,
+	attemptId: string,
+) {
+	startAudio.assertAvailable(attemptId);
 	const launchConfig = resolveLaunchConfig(config);
 	const chosen = launchConfig.asrc;
 	const wasAuto = config.asrc === AUDIO_SOURCE_AUTO;
@@ -196,6 +201,7 @@ function launchAudio(config: RuntimeConfig, startAudio: StartAudio) {
 		wasAuto && startAudio.restoration === undefined
 			? startAudio.autoMicChoices(launchConfig, audioOff)
 			: startAudio.micChoices;
+	if (micChoices === null) throw unavailableAudioRoute(attemptId);
 	return {
 		launchConfig,
 		chosen,
@@ -260,7 +266,8 @@ export async function startStream(
 	};
 	// Auto can first resolve from the live roster, but retries cannot choose a
 	// new microphone. Dispatch still rechecks the accepted physical identity.
-	const audio = autoLaunches.get(startAudio) ?? launchAudio(config, startAudio);
+	const audio =
+		autoLaunches.get(startAudio) ?? launchAudio(config, startAudio, attemptId);
 	if (audio.wasAuto) autoLaunches.set(startAudio, audio);
 	const {
 		launchConfig,
@@ -398,15 +405,7 @@ export async function startStream(
 							embedded: isEmbeddedAudioPipeline(pipeline.source),
 						},
 					);
-					if (!resolved.ok)
-						throw new StreamStartFailure(
-							typedStartFailure(
-								attemptId,
-								"params",
-								"audio_source_unavailable",
-								AUDIO_SOURCE_PROBE_FAILED,
-							),
-						);
+					if (!resolved.ok) throw unavailableAudioRoute(attemptId);
 					originalKeys = resolved.originalKeys;
 					launchedAsrc = resolved.asrc;
 					launchedAudio = {

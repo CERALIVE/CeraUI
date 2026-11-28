@@ -76,6 +76,7 @@ import {
 } from "../modules/streaming/pipelines.ts";
 import { setPreviewEncodeReplayTransport } from "../modules/streaming/preview-encode-replay.ts";
 import {
+	getSourcesMessage,
 	refreshEngineDeviceCache,
 	setEngineAudioChangeHandler,
 } from "../modules/streaming/sources.ts";
@@ -2547,7 +2548,7 @@ function useRoutePeer(
 
 const networkSources = ["rtmp", "srt"] as const;
 
-async function embeddedStartPeer() {
+async function embeddedStartPeer(extraPipeline?: string) {
 	clearCapabilitiesCache();
 	await initPipelines({
 		fetchEngineCapabilities: async () => ({
@@ -2564,6 +2565,18 @@ async function embeddedStartPeer() {
 						default_resolution: "1080p",
 						default_framerate: 30,
 					})),
+					...(extraPipeline === undefined
+						? []
+						: [
+								{
+									id: extraPipeline,
+									supports_audio: true,
+									supports_resolution_override: false,
+									supports_framerate_override: false,
+									default_resolution: "1080p",
+									default_framerate: 30,
+								},
+							]),
 				],
 			},
 			schemaVersion: SCHEMA_VERSION,
@@ -2581,6 +2594,62 @@ async function embeddedStartPeer() {
 	saveConfig();
 	return peer;
 }
+
+test.each(["Primary", "Auto"] as const)(
+	"USB Start with %s returns typed recovery if only the saved RTMP leg covers Track 2",
+	async (asrc) => {
+		const usb: CaptureStreamSource = {
+			...HDMI,
+			id: "usb-camera",
+			pipelineId: "libuvch264",
+			kind: "uvc_h264",
+			displayName: "USB camera",
+		};
+		const peer = await embeddedStartPeer(usb.pipelineId);
+		const saved = [entry("Primary", [1]), entry("rtmp", [2])];
+		Object.assign(getConfig(), {
+			pipeline: "rtmp",
+			source: "rtmp",
+			asrc: "Pipeline default",
+		});
+		expect(
+			await call(setConfigProcedure, { audio_inputs: saved }, context()),
+		).toMatchObject({ success: true });
+		const before = await Bun.file(getConfigFilePath()).text();
+		const checksBeforeStart = peer.checks.length;
+		setStreamingProcedureDepsForTest({
+			getSourcesMessage: () => {
+				const sources = getSourcesMessage();
+				return { ...sources, sources: [...sources.sources, usb] };
+			},
+		});
+		try {
+			const result = await start({ source: usb.id, asrc });
+			if (!("result" in result) || result.result !== "failed")
+				throw new Error(
+					`Expected typed Start refusal: ${JSON.stringify(result)}`,
+				);
+			expect(result).toMatchObject({
+				result: "failed",
+				success: false,
+				error: "audio_source_probe_failed",
+				failure: {
+					attemptId: result.attemptId,
+					phase: "params",
+					class: "audio_source_unavailable",
+					code: "audio_source_probe_failed",
+					retriable: false,
+				},
+			});
+			expect(result.attemptId).toBeTruthy();
+			expect(peer.starts()).toEqual([]);
+			expect(peer.checks.slice(checksBeforeStart)).toEqual([]);
+			expect(await Bun.file(getConfigFilePath()).text()).toBe(before);
+		} finally {
+			setStreamingProcedureDepsForTest(null);
+		}
+	},
+);
 
 test.each(
 	networkSources.flatMap((pipeline) =>
@@ -3324,6 +3393,113 @@ test("Stop before backend preflight never stops an unrelated engine stream", asy
 		query.mockResolvedValue("idle");
 		gate.resolve();
 		await started;
+	}
+});
+
+test.each([
+	["engine connect", "Primary"],
+	["engine capability check", "Primary"],
+	["engine connect", "No audio"],
+] as const)(
+	"Stop during %s for a Start with %s obeys its cancellation scope",
+	async (stage, asrc) => {
+		getConfig().audio_inputs = undefined;
+		expect(await pick(asrc)).toMatchObject({ success: true });
+		const peer = await scopedStartPeer(
+			stage === "engine connect" ? "foreign" : "negotiation-deadline",
+			testMicRoutes,
+		);
+		useRoutePeer(peer);
+		if (stage === "engine connect") {
+			const deps = engine.backend["deps"];
+			const connect = deps.connect;
+			spyOn(deps, "connect").mockImplementationOnce(async (opts) => {
+				await hold();
+				return connect(opts);
+			});
+		}
+		const query = spyOn(streamSessionProductionDeps, "queryRuntime");
+		const starting = start();
+		try {
+			const entered =
+				stage === "engine connect" ? reached.promise : peer.negotiating;
+			expect(
+				await Promise.race([
+					entered.then(() => "preflight"),
+					starting.then(() => "completed"),
+				]),
+			).toBe("preflight");
+			query.mockImplementation(async () =>
+				peer.physical() === "foreign" ? "streaming" : "idle",
+			);
+			const stopped = await stopStreamSession("operator");
+			gate.resolve();
+			expect(await starting).toMatchObject({ success: false });
+			expect(peer.starts()).toEqual([]);
+			expect(peer.cancels()).toEqual([]);
+			expect(peer.prepares()).toEqual([]);
+			if (asrc === "No audio") {
+				expect(peer.stops()).toEqual([{ method: "stop", peer: 1 }]);
+				expect(peer.physical()).toBe("idle");
+				expect(stopped).toEqual({ result: "stopped" });
+			} else {
+				expect(peer.stops()).toEqual([]);
+				expect(peer.physical()).toBe("foreign");
+				expect(stopped).toEqual({
+					result: "stop_failed",
+					reason: "stop_not_confirmed",
+				});
+			}
+		} finally {
+			query.mockResolvedValue("idle");
+			gate.resolve();
+			await starting;
+		}
+	},
+);
+
+test("Stop during deferred embedded Start does not stop a foreign stream when a saved mic returns", async () => {
+	await embeddedStartPeer();
+	Object.assign(getConfig(), {
+		pipeline: "rtmp",
+		source: "rtmp",
+		asrc: "Pipeline default",
+	});
+	expect(
+		await call(
+			setConfigProcedure,
+			{ audio_inputs: [entry("rtmp", [1]), entry("Second", [1])] },
+			context(),
+		),
+	).toMatchObject({ success: true });
+	audio.setMockAudioDevicesProvider(() => ({}));
+	const peer = await scopedStartPeer("negotiation-deadline", testMicRoutes);
+	useRoutePeer(peer);
+	const query = spyOn(streamSessionProductionDeps, "queryRuntime");
+	const starting = start();
+	try {
+		expect(
+			await Promise.race([
+				peer.negotiating.then(() => "negotiating"),
+				starting.then(() => "completed"),
+			]),
+		).toBe("negotiating");
+		audio.setMockAudioDevicesProvider(() => ({ Second: "hw:CARD=second" }));
+		query.mockImplementation(async () =>
+			peer.physical() === "foreign" ? "streaming" : "idle",
+		);
+		const stopped = await stopStreamSession("operator");
+		expect(await starting).toMatchObject({ success: false });
+		expect(peer.stops()).toEqual([]);
+		expect(peer.starts()).toEqual([]);
+		expect(peer.physical()).toBe("foreign");
+		expect(stopped).toEqual({
+			result: "stop_failed",
+			reason: "stop_not_confirmed",
+		});
+	} finally {
+		query.mockResolvedValue("idle");
+		await starting;
 	}
 });
 

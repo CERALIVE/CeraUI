@@ -85,8 +85,9 @@ async function reconnect(): Promise<void> {
 		},
 		data: { isAuthenticated: true, lastActive: Date.now() },
 	} as unknown as import("ws").default;
-	const starting = startStreamSession({
+	const started = await startStreamSession({
 		origin: "set-profile",
+		audio: accepted.audio,
 		launch: async ({ attemptId, generation }) => {
 			const result = await startStream(
 				stubConn,
@@ -108,7 +109,6 @@ async function reconnect(): Promise<void> {
 			}
 		},
 	});
-	const started = await accepted.audio.whileInFlight(starting);
 	if (started.result !== "started") {
 		logger.warn("set-profile: stream restart did not complete", { started });
 	}

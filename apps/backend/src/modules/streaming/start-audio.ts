@@ -14,6 +14,7 @@ import {
 	audioInputEngineId,
 	effectiveAudioInputs,
 	projectLaunchAudioInputs,
+	unavailableAudioRoute,
 } from "./audio-inputs.ts";
 import { getLastCapabilities } from "./capabilities.ts";
 import {
@@ -50,7 +51,8 @@ export interface StartAudio {
 	 */
 	readonly config: StartAudioConfig;
 	readonly audioEvidence: ReadonlyMap<string, AudioIdentityEvidence>;
-	readonly micChoices: ReturnType<typeof freezeMicChoices>;
+	readonly micChoices: NonNullable<ReturnType<typeof freezeMicChoices>>;
+	readonly assertAvailable: (attemptId: string) => void;
 	readonly autoMicChoices: (
 		config: RuntimeConfig,
 		audioOff: boolean,
@@ -118,9 +120,27 @@ export function acceptStartAudio(
 	}
 	const legacySuccessor = (id: string) =>
 		audioEvidence.has(id) ? undefined : audioIdentitySuccessor(id);
+	const micChoices =
+		restoration === undefined
+			? freezeMicChoices(
+					{
+						...saved,
+						...request,
+						...pressed,
+						pipeline: request.pipeline ?? saved.pipeline,
+						source: request.source ?? saved.source,
+						asrc: pressed.asrc === AUDIO_SOURCE_AUTO ? undefined : pressed.asrc,
+					},
+					savedProofs,
+				)
+			: new Map();
 	const startAudio: StartAudio = {
 		audioEvidence,
 		verifiedMicChoices: new Map(),
+		micChoices: micChoices ?? new Map(),
+		assertAvailable: (attemptId) => {
+			if (micChoices === null) throw unavailableAudioRoute(attemptId);
+		},
 		originalMicChoice: (id) =>
 			startAudio.micChoices.has(id)
 				? id
@@ -130,21 +150,6 @@ export function acceptStartAudio(
 		...(restoration === undefined ? {} : { restoration }),
 		autoMicChoices: (config, audioOff) =>
 			freezeMicChoices(config, savedProofs, startAudio.micChoices, audioOff),
-		micChoices:
-			restoration === undefined
-				? freezeMicChoices(
-						{
-							...saved,
-							...request,
-							...pressed,
-							pipeline: request.pipeline ?? saved.pipeline,
-							source: request.source ?? saved.source,
-							asrc:
-								pressed.asrc === AUDIO_SOURCE_AUTO ? undefined : pressed.asrc,
-						},
-						savedProofs,
-					)
-				: new Map(),
 		get config() {
 			const { asrc, audio_inputs } = pressed;
 			return {

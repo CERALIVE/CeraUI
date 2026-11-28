@@ -15,19 +15,32 @@ import {
 import {
 	audioInputEngineId,
 	effectiveAudioInputs,
-	launchAudioPlan,
+	planLaunchAudio,
 } from "./audio-inputs.ts";
 import { searchPipelines } from "./pipelines.ts";
 import { getStreamingBackend } from "./streaming-engine.ts";
+
+function isMicSelector(id: string | undefined): id is string {
+	return id !== undefined && id !== "embedded" && id !== AUDIO_SILENCE_INPUT_ID;
+}
 
 export function micRouteKeys(audio: AudioConfig | undefined): string[] {
 	if (audio?.inputs !== undefined)
 		return audio.inputs
 			.map((input) => input.device ?? input.input_id)
-			.filter((id) => id !== "embedded" && id !== AUDIO_SILENCE_INPUT_ID);
+			.filter(isMicSelector);
 	return audio?.device === undefined || audio.mode === "none"
 		? []
 		: [audio.device];
+}
+
+/** A redundant local leg absent now can return before deferred dispatch. */
+export function deferredMixCanUseMic(config: RuntimeConfig): boolean {
+	return (
+		config.audio_inputs?.some(({ id }) =>
+			isMicSelector(audioInputEngineId(id, config)),
+		) ?? false
+	);
 }
 
 export function hasOrderedMicProofs(proofs: readonly string[], count: number) {
@@ -95,11 +108,7 @@ export function noteMicChoices(
 		const device = config.audio_inputs?.some((input) => input.id === id)
 			? audioInputEngineId(id, config)
 			: resolveAudioMode(id, false).device;
-		return device === undefined ||
-			device === "embedded" ||
-			device === AUDIO_SILENCE_INPUT_ID
-			? []
-			: [{ id, device, current }];
+		return isMicSelector(device) ? [{ id, device, current }] : [];
 	});
 	const [first, second] = choicesToObserve;
 	if (first === undefined) return undefined;
@@ -145,8 +154,9 @@ export function freezeMicChoices(
 	saved: ReadonlyMap<string, Admission>,
 	prior: ReadonlyMap<string, Admission> = new Map(),
 	audioOff?: boolean,
-): ReadonlyMap<string, Admission> {
-	const plan = launchAudioPlan(config, { audioOff });
+): ReadonlyMap<string, Admission> | null {
+	const plan = planLaunchAudio(config, { audioOff });
+	if (plan === null) return null;
 	const keys = micRouteKeys(plan);
 	const accepted = new Map(prior);
 	if (plan === undefined || keys.length === 0) return accepted;

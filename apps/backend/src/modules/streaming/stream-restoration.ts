@@ -297,8 +297,9 @@ async function defaultLaunch(
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
 	let relayAddress: string | undefined;
-	const starting = startStreamSession({
+	const result = await startStreamSession({
 		origin: "restoration",
+		audio: startAudio,
 		launch: async ({ attemptId }) => {
 			relayAddress ??= await resolveSrtla(resolved.srtlaAddr);
 			const launched = await startStream(
@@ -325,8 +326,6 @@ async function defaultLaunch(
 			}
 		},
 	});
-
-	const result = await startAudio.whileInFlight(starting);
 	if (result.result === "started") return { ok: true };
 	if (result.result === "busy") return { ok: false, reason: "start_busy" };
 	if (result.result === "cancelled")

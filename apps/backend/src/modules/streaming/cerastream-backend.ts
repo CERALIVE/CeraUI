@@ -130,10 +130,14 @@ import {
 	pinnedLaunchedAudio,
 	readArmedStreamMarker,
 } from "./armed-stream-marker.ts";
+import { NO_AUDIO_ID } from "./audio.ts";
 import {
 	audioInputEngineId,
 	effectiveAudioInputs,
+	type LaunchAudioPlan,
 	launchAudioPlan,
+	planLaunchAudio,
+	unavailableAudioRoute,
 } from "./audio-inputs.ts";
 import {
 	beginCapabilitiesEpoch,
@@ -173,6 +177,7 @@ import {
 	type LaunchTransaction,
 } from "./launch-transaction.ts";
 import {
+	deferredMixCanUseMic,
 	hasOrderedMicProofs,
 	micRouteKeys,
 	networkAudioSource,
@@ -181,7 +186,6 @@ import { asRawRequestClient } from "./raw-request.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
-	typedStartFailure,
 } from "./start-failure-taxonomy.ts";
 import {
 	ENGINE_CLOSE_DEADLINE_MS,
@@ -894,24 +898,40 @@ export class CerastreamBackend implements StreamingBackend {
 		let acquiredSubscription: Subscription | undefined;
 		const launchTransaction =
 			transaction ?? createLaunchTransaction("backend-start");
-		const micFailure = () =>
-			typedStartFailure(
-				opts.micRoute?.attemptId ?? "backend-start",
-				"params",
-				"audio_source_unavailable",
-				"audio_source_probe_failed",
-			);
+		const attemptId = opts.micRoute?.attemptId ?? "backend-start";
 		try {
-			let params = this.buildStartParams(config, opts);
+			const pipeline = config.pipeline ?? opts.pipeline;
+			const audioOff = opts.audioOff ?? config.asrc === NO_AUDIO_ID;
+			const audioOptions = () => ({
+				audioOff,
+				embeddedAudioActive: this.deps.isEmbeddedAudioActive(pipeline),
+			});
+			const initialPlan = planLaunchAudio(config, audioOptions());
+			const deferred = opts.audioAtDispatch !== undefined;
 			// Preserve explicit Stop for an ordinary launch with no concrete mic.
-			// A scoped reservation or microphone preflight uses read-only cancellation.
+			// Classify the accepted route, not the params with audio deferred.
+			const attemptOnly =
+				initialPlan === null ||
+				micRouteKeys(initialPlan).length > 0 ||
+				(deferred && !audioOff && deferredMixCanUseMic(config));
 			registerLaunchRollback({
-				kind:
-					micRouteKeys(params.audio).length === 0
-						? "transaction"
-						: "pre-dispatch",
+				kind: attemptOnly ? "pre-dispatch" : "transaction",
 				run: launchTransaction.rollback,
 			});
+			if (!deferred && initialPlan === null)
+				throw unavailableAudioRoute(attemptId);
+			let params = this.buildStartParams(
+				config,
+				opts,
+				deferred
+					? undefined
+					: this.encodeStartAudio(config, initialPlan ?? undefined),
+			);
+			const resolveDispatchAudio = (dispatchConfig: RuntimeConfig) =>
+				this.encodeStartAudio(
+					dispatchConfig,
+					launchAudioPlan(dispatchConfig, { ...audioOptions(), attemptId }),
+				);
 			let audioMixInputs: CerastreamBackend["audioMixInputs"];
 			let appliedProofs: string[] | undefined;
 			await this.enqueue(async () => {
@@ -1056,11 +1076,7 @@ export class CerastreamBackend implements StreamingBackend {
 						const launchConfig = prospectiveConfig();
 						if (launchConfig !== config) {
 							const audio = startParamsWithAudioModeSchema.shape.audio.parse(
-								this.encodeStartAudio(
-									launchConfig,
-									config.pipeline ?? opts.pipeline,
-									opts.audioOff,
-								),
+								resolveDispatchAudio(launchConfig),
 							);
 							const { audio: _previous, ...rest } = params;
 							params = audio === undefined ? rest : { ...rest, audio };
@@ -1072,7 +1088,7 @@ export class CerastreamBackend implements StreamingBackend {
 							opts.micRoute?.legacyAddressOnly !== true
 						) {
 							const refuse = () => {
-								throw new StreamStartFailure(micFailure());
+								throw unavailableAudioRoute(attemptId);
 							};
 							checkingMicRoutes = true;
 							const prepared = attempt;
@@ -1098,11 +1114,7 @@ export class CerastreamBackend implements StreamingBackend {
 									attempt !== prepared ||
 									!Bun.deepEquals(
 										audio,
-										this.encodeStartAudio(
-											prospectiveConfig(),
-											params.pipeline,
-											opts.audioOff,
-										),
+										resolveDispatchAudio(prospectiveConfig()),
 									)
 								)
 									refuse();
@@ -1217,13 +1229,13 @@ export class CerastreamBackend implements StreamingBackend {
 				this.subscription = undefined;
 			const failure =
 				checkingMicRoutes && !dispatched
-					? micFailure()
+					? unavailableAudioRoute(attemptId).failure
 					: error instanceof StreamStartFailure
 						? error.failure
 						: classifyStartFailure(
 								dispatched ? "start-rpc" : "params",
 								error,
-								"backend-start",
+								attemptId,
 							);
 			throw new StreamStartFailure(
 				failure,
@@ -2132,10 +2144,8 @@ export class CerastreamBackend implements StreamingBackend {
 	 */
 	private encodeInputAudioFields(
 		config: RuntimeConfig,
-		pipelineId: string | undefined,
-		audioOff?: boolean,
+		audio: StartParams["audio"],
 		inputResolved = false,
-		deferAudio = false,
 	): {
 		input_id?: string;
 		codec?: "h264" | "h265";
@@ -2147,9 +2157,6 @@ export class CerastreamBackend implements StreamingBackend {
 		const inputId = inputResolved
 			? config.selected_video_input
 			: (config.selected_video_input ?? this.deps.getActiveInput());
-		const audio = deferAudio
-			? undefined
-			: this.encodeStartAudio(config, pipelineId, audioOff);
 		return {
 			...(inputId !== undefined ? { input_id: inputId } : {}),
 			...(config.video_codec !== undefined
@@ -2181,8 +2188,7 @@ export class CerastreamBackend implements StreamingBackend {
 
 	private encodeStartAudio(
 		config: RuntimeConfig,
-		pipelineId: string | undefined,
-		audioOff?: boolean,
+		plan: LaunchAudioPlan | undefined,
 	): StartParams["audio"] {
 		// The operator's audio pick maps onto the engine's `audio.mode`
 		// discriminator (never a pseudo-source string leaked into `audio.device`):
@@ -2190,10 +2196,6 @@ export class CerastreamBackend implements StreamingBackend {
 		// default + its inputs, "Pipeline default" / a network-embedded source ⇒
 		// default, a real device ⇒ device + its ALSA id. An absent `asrc` with no
 		// mix omits the section entirely (the engine's legacy inference).
-		const plan = launchAudioPlan(config, {
-			audioOff,
-			embeddedAudioActive: this.deps.isEmbeddedAudioActive(pipelineId),
-		});
 		const audio = {
 			// Absent means the operator stated no backend, so NO key is serialized
 			// and the engine's own persisted default governs. Substituting a value
@@ -2216,6 +2218,7 @@ export class CerastreamBackend implements StreamingBackend {
 	private buildStartParams(
 		config: RuntimeConfig,
 		opts: StreamRunOptions,
+		audio: StartParams["audio"],
 	): StartParamsWithAudioMode {
 		const srt: {
 			host: string;
@@ -2241,13 +2244,7 @@ export class CerastreamBackend implements StreamingBackend {
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
 				balancer: config.balancer ?? DEFAULT_BALANCER,
 			},
-			...this.encodeInputAudioFields(
-				config,
-				config.pipeline ?? opts.pipeline,
-				opts.audioOff,
-				opts.inputResolved,
-				opts.audioAtDispatch !== undefined,
-			),
+			...this.encodeInputAudioFields(config, audio, opts.inputResolved),
 		});
 	}
 
@@ -2264,7 +2261,17 @@ export class CerastreamBackend implements StreamingBackend {
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
 				balancer: config.balancer ?? DEFAULT_BALANCER,
 			},
-			...this.encodeInputAudioFields(config, config.pipeline),
+			...this.encodeInputAudioFields(
+				config,
+				this.encodeStartAudio(
+					config,
+					launchAudioPlan(config, {
+						embeddedAudioActive: this.deps.isEmbeddedAudioActive(
+							config.pipeline,
+						),
+					}),
+				),
+			),
 		};
 	}
 

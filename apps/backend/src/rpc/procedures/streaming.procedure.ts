@@ -325,11 +325,12 @@ export const streamingStartProcedure = authedProcedure
 									: resolveSelectionAnchor(input.source, sources),
 						}),
 					};
-		const starting = startStreamSession({
+		const lifecycleResult = await startStreamSession({
 			origin:
 				context.ws.remoteAddress === "control-channel"
 					? "remote-control"
 					: "ui",
+			audio: accepted.ok ? accepted.snapshot.audio : undefined,
 			launch: async ({ attemptId, generation }) => {
 				if (!accepted.ok) {
 					legacyError = accepted.error;
@@ -500,9 +501,6 @@ export const streamingStartProcedure = authedProcedure
 				appliedResponse = applied;
 			},
 		});
-		const lifecycleResult = await (accepted.ok
-			? accepted.snapshot.audio.whileInFlight(starting)
-			: starting);
 		return startResponse(lifecycleResult, appliedResponse, legacyError);
 	});
 

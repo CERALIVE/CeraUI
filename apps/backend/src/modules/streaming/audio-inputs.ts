@@ -375,11 +375,7 @@ export function projectLaunchAudioInputs(
 
 function engineAudioInputs(
 	config: RuntimeConfig,
-	audioOff: boolean,
-	attemptId: string,
-): AudioInputConfig[] | undefined {
-	// "No audio" sends nothing whatever mix is saved; the mix stays for the next pick.
-	if (audioOff) return undefined;
+): AudioInputConfig[] | undefined | null {
 	const effective = effectiveAudioInputs(config);
 	if (!getLastCapabilities()?.audio_mix || !effective?.length) return undefined;
 	const inputs = projectLaunchAudioInputs(config, effective);
@@ -392,16 +388,9 @@ function engineAudioInputs(
 		const input_id = audioInputEngineId(id, config);
 		return input_id === undefined ? [] : [{ input_id, ...input }];
 	});
-	if (mapped === undefined || mapped.length !== ordered?.length)
-		throw new StreamStartFailure(
-			typedStartFailure(
-				attemptId,
-				"params",
-				"audio_source_unavailable",
-				"audio_source_probe_failed",
-			),
-		);
-	return mapped;
+	return mapped !== undefined && mapped.length === ordered?.length
+		? mapped
+		: null;
 }
 
 export interface LaunchAudioPlan extends AudioModeSelection {
@@ -417,22 +406,44 @@ export interface LaunchAudioPlan extends AudioModeSelection {
  * Undefined when no `asrc` is set and no mix is saved, so the start keeps the
  * engine's legacy inference.
  */
-export function launchAudioPlan(
+type LaunchAudioOptions = {
+	readonly audioOff?: boolean | undefined;
+	readonly embeddedAudioActive?: boolean;
+};
+
+export function planLaunchAudio(
 	config: RuntimeConfig,
 	{
 		audioOff = config.asrc === NO_AUDIO_ID,
 		embeddedAudioActive = isEmbeddedAudioPipeline(config.pipeline),
-		attemptId = "backend-start",
-	}: {
-		audioOff?: boolean | undefined;
-		embeddedAudioActive?: boolean;
-		attemptId?: string;
-	} = {},
-): LaunchAudioPlan | undefined {
+	}: LaunchAudioOptions = {},
+): LaunchAudioPlan | undefined | null {
 	if (audioOff) return { mode: "none" };
-	const inputs = engineAudioInputs(config, audioOff, attemptId);
+	const inputs = engineAudioInputs(config);
+	if (inputs === null) return null;
 	if (inputs !== undefined) return { mode: "default", inputs };
 	return config.asrc === undefined
 		? undefined
 		: resolveAudioMode(config.asrc, embeddedAudioActive);
+}
+
+export function unavailableAudioRoute(attemptId: string): StreamStartFailure {
+	return new StreamStartFailure(
+		typedStartFailure(
+			attemptId,
+			"params",
+			"audio_source_unavailable",
+			"audio_source_probe_failed",
+		),
+	);
+}
+
+export function launchAudioPlan(
+	config: RuntimeConfig,
+	options: LaunchAudioOptions & { readonly attemptId?: string } = {},
+): LaunchAudioPlan | undefined {
+	const plan = planLaunchAudio(config, options);
+	if (plan === null)
+		throw unavailableAudioRoute(options.attemptId ?? "backend-start");
+	return plan;
 }

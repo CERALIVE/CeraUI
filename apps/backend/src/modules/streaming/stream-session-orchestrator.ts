@@ -75,6 +75,12 @@ export type StreamLaunchContext = {
 
 export type StreamStartRequest = {
 	readonly origin: StreamLaunchOrigin;
+	readonly audio?:
+		| Pick<
+				import("./start-audio.ts").StartAudio,
+				"assertAvailable" | "whileInFlight"
+		  >
+		| undefined;
 	readonly launch: (context: StreamLaunchContext) => Promise<void>;
 };
 
@@ -569,7 +575,10 @@ export function createStreamSessionOrchestrator(
 					},
 				};
 				return ownership.trackLaunch(
-					withStreamLaunchOwnership(context, () => request.launch(context)),
+					withStreamLaunchOwnership(context, () => {
+						request.audio?.assertAvailable(attemptId);
+						return request.launch(context);
+					}),
 				);
 			},
 			classifyUnknown: (error) =>
@@ -1210,7 +1219,8 @@ bindStreamLiveness(productionOrchestrator.streamLiveness);
 export function startStreamSession(
 	request: StreamStartRequest,
 ): Promise<StartResult> {
-	return productionOrchestrator.start(request);
+	const starting = productionOrchestrator.start(request);
+	return request.audio?.whileInFlight(starting) ?? starting;
 }
 
 export function stopStreamSession(cause: StreamStopCause): Promise<StopResult> {

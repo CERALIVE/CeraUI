@@ -124,7 +124,10 @@ Start builds `effectiveAudioInputs` from the saved mix, with an available
 primary added if needed. `projectLaunchAudioInputs` omits unavailable legs
 only if it omits no primary leg from that mix and the surviving legs cover
 every assigned track. Otherwise Start keeps the routing for normal admission
-or refuses an input that cannot be safely resolved. The engine adapter puts the primary
+or refuses an input that cannot be safely resolved. If a saved leg from another
+source is the only input on a track, Start returns `audio_source_unavailable`
+through the normal recovery flow without dispatching or changing saved routing.
+The engine adapter puts the primary
 first, maps the projected IDs to engine selectors, and sends producer-owned
 `audio.inputs` instead of `audio.device`. Projection does not rewrite the
 saved mix. Live value edits target inputs admitted to the running session;
@@ -136,11 +139,14 @@ available mix is full, the pick replaces the previous main or, if that input
 is not in the available mix, the first available entry. Accepted picks
 preserve the relative order of all surviving inputs and save the selection
 and mix in one synchronous write. A pick that would exceed the saved slot
-limit is refused. The same request observes the selected route. A missing
-proof returns `audio_source_probe_failed`, not
-permission to retry with a bare `asrc` or to enroll the current occupant on
-Start. Without `audio_pick` an `asrc` save changes no membership, but a concrete
-microphone still requires the same observation before the save can succeed.
+limit is refused. A tagged pick for an unavailable input returns
+`audio_source_unavailable` before writing the preference or mix. An accepted
+write observes the selected route in the same request. If that proof fails,
+the reply is `audio_source_probe_failed`: the preference and any valid mix may
+already be saved, but the unverified input cannot authorize Start. Live does
+not retry with a bare `asrc`; explicitly pick the microphone again to verify it.
+A bare `asrc` write changes no membership and also needs proof before it can
+acknowledge a concrete microphone.
 Idle edits from the Live strips arrive as per-input deltas on
 `setAudioMix`: values, or `include` / `track` for membership and tracks, which
 `changedAudioInputs` composes on the current saved mix (refusing to turn the

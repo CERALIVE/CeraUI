@@ -155,8 +155,9 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 	}
 
 	let relayAddress: string | undefined;
-	const starting = startStreamSession({
+	const result = await startStreamSession({
 		origin: "autostart",
+		audio: startAudio,
 		launch: async ({ attemptId }) => {
 			relayAddress ??= await resolveSrtla(c.srtlaAddr);
 			const launched = await startStream(
@@ -183,7 +184,6 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 			}
 		},
 	});
-	const result = await startAudio.whileInFlight(starting);
 	if (result.result === "failed") {
 		logger.error("autostart failed", {
 			attemptId: result.attemptId,
