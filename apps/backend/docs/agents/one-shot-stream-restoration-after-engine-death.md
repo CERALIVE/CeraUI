@@ -30,7 +30,10 @@ config snapshot plus the current `boot_id`, and nothing else that matters.
   encoding the previous one, so restoring from disk would apply an edit the
   operator explicitly deferred to their next start. `startStream` therefore takes
   an optional `configOverride` (absent for every other caller — byte-identical
-  behaviour) and restoration passes the snapshot.
+  behaviour) and restoration passes the snapshot. A new marker records `null`
+  for `selected_video_input` when Start omitted `input_id`. Restoration omits it
+  again. A legacy marker without the field instead captures the active input
+  once before validation and reuses that choice on retries.
 - **Its audio is the running audio.** The marker is written once, so a live audio
   change the engine acknowledged is written into it and into the launch pin that a
   later arming reads (`followLiveAudio`): gain, mute and delay of the mix
@@ -50,6 +53,12 @@ config snapshot plus the current `boot_id`, and nothing else that matters.
   still owns backend, codec, delay and applied mix values; discovery never
   substitutes an unrelated saved pick. A marker from before the mix was recorded
   leaves the mix and the backend to the saved ones.
+- **The opaque route batch describes the applied local legs, in wire order.**
+  A fresh marker records it only after an acknowledged launch, with an empty
+  batch for a new launch without local legs. A restore verifies that batch on
+  the launch socket, never admits a fresh batch for a saved address. A historical
+  address-only marker retains its old behavior; old inventory IDs do not become
+  proofs. A failed or late action does not advance the marker.
 - **Video and network fields are not followed.** A live bitrate, source or encoder
   change leaves the marker's value from arming, as before. The audio part is covered
   by `tests/no-audio-start.test.ts` through the real marker, runner and launch.

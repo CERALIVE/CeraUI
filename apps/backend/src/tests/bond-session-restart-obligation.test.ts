@@ -85,7 +85,8 @@ afterEach(async () => {
 async function startLive() {
 	let live = false;
 	spyOn(streaming, "getIsStreaming").mockImplementation(() => live);
-	spyOn(streaming, "updateConfig").mockResolvedValue({
+	const accepted = streaming.acceptStartConfig({});
+	spyOn(accepted, "prepare").mockResolvedValue({
 		pipeline: {
 			source: "hdmi",
 			name: "Constructed",
@@ -96,13 +97,16 @@ async function startLive() {
 			supportsFramerateOverride: false,
 			audio_kind: "none",
 		},
+		config: {},
 		srtlaAddr: "203.0.113.1",
 		srtlaPort: 5000,
 		streamid: "constructed",
 	});
 	spyOn(launch, "startStream").mockResolvedValue({ success: true });
 	const restart = spyOn(srtla, "restartSrtla").mockImplementation(() => {});
-	expect(await session.start(WebSocket.prototype, {}, GENERATION)).toEqual({
+	expect(
+		await session.start(WebSocket.prototype, accepted, GENERATION),
+	).toEqual({
 		success: true,
 	});
 	live = true;

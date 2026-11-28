@@ -86,13 +86,13 @@ import type { EngineRuntimeState } from "./streaming-backend.ts";
  * snapshot is what makes restoration restore the stream that was interrupted.
  */
 export function captureArmedStreamConfig(): ArmedStreamConfig {
-	const config = getConfig();
+	const launched = pinnedLaunchedAudio();
+	const config = launched?.streamConfig ?? getConfig();
 	const snapshot: Record<string, unknown> = {};
 	const copy = (key: keyof ArmedStreamConfig): void => {
 		const value = (config as unknown as Record<string, unknown>)[key];
 		if (value !== undefined) snapshot[key] = value;
 	};
-	const launched = pinnedLaunchedAudio();
 	const audio = launched ?? config;
 	for (const key of ["delay", "acodec", "asrc", "audio_backend"] as const) {
 		if (audio[key] !== undefined) snapshot[key] = audio[key];
@@ -102,6 +102,8 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 		snapshot.audio_physical_ids = launched.audio_physical_ids;
 	if (launched?.audio_unverified_ids !== undefined)
 		snapshot.audio_unverified_ids = launched.audio_unverified_ids;
+	if (launched?.mic_route_proofs !== undefined)
+		snapshot.mic_route_proofs = launched.mic_route_proofs;
 	if (launched?.audio_silenced) snapshot.audio_silenced = true;
 	copy("srt_latency");
 	copy("pipeline");
@@ -118,10 +120,18 @@ export function captureArmedStreamConfig(): ArmedStreamConfig {
 	copy("framerate");
 	copy("video_codec");
 	copy("video_passthrough");
+	copy("composition");
 	copy("source");
 	copy("source_stable_id");
-	copy("selected_video_input");
 	copy("input_mode");
+	if (launched?.streamConfig !== undefined) {
+		snapshot.selected_video_input = config.selected_video_input ?? null;
+		snapshot.balancer = config.balancer ?? null;
+		snapshot.failover_rate_policy = config.failover_rate_policy ?? null;
+		snapshot.previewEncode = config.previewEncode ?? null;
+	} else {
+		copy("selected_video_input");
+	}
 	return snapshot as ArmedStreamConfig;
 }
 
@@ -157,6 +167,7 @@ export function armStreamRestoration(
 	writeArmedStreamMarker(
 		{
 			armedAt: now(),
+			armId: crypto.randomUUID(),
 			bootId,
 			config: capture(),
 			...(options.diagnostics === undefined
@@ -223,6 +234,7 @@ async function defaultLaunch(
 	current: () => boolean,
 ): Promise<RestorationLaunchOutcome> {
 	const [
+		{ deviceRegistry },
 		{ validateConfig },
 		{ resolveSrtla },
 		{ prepareSrtlaIpAddresses },
@@ -231,6 +243,7 @@ async function defaultLaunch(
 		{ startStreamSession },
 		{ StreamStartFailure, classifyStartFailure, typedStartFailure },
 	] = await Promise.all([
+		import("./devices.ts"),
 		import("./streaming.ts"),
 		import("./srtla.ts"),
 		import("./streamloop/session.ts"),
@@ -241,8 +254,35 @@ async function defaultLaunch(
 	]);
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
-	const startAudio = restoredStartAudio(config);
-	const launchConfig = { ...config, ...startAudio.config };
+	const saved = getConfig();
+	const startAudio = restoredStartAudio(config, saved);
+	// Legacy markers never recorded these settings. Keep their existing
+	// fallback, but take it once before validating or waiting for the engine.
+	const {
+		balancer,
+		failover_rate_policy,
+		previewEncode,
+		selected_video_input,
+		...recorded
+	} = config;
+	const launchConfig = {
+		relay_protocol: saved.relay_protocol,
+		...recorded,
+		balancer: balancer === undefined ? saved.balancer : (balancer ?? undefined),
+		failover_rate_policy:
+			failover_rate_policy === undefined
+				? saved.failover_rate_policy
+				: (failover_rate_policy ?? undefined),
+		previewEncode:
+			previewEncode === undefined
+				? saved.previewEncode
+				: (previewEncode ?? undefined),
+		...startAudio.config,
+		selected_video_input:
+			selected_video_input === undefined
+				? deviceRegistry.getActiveInput()
+				: (selected_video_input ?? undefined),
+	};
 	let resolved: Awaited<ReturnType<typeof validateConfig>>;
 	try {
 		resolved = await validateConfig(launchConfig, startAudio);
@@ -256,18 +296,20 @@ async function defaultLaunch(
 	}
 
 	if (!current()) return { ok: false, reason: "start_cancelled" };
-	const starting = startStreamSession({
+	let relayAddress: string | undefined;
+	const result = await startStreamSession({
 		origin: "restoration",
+		audio: startAudio,
 		launch: async ({ attemptId }) => {
-			const srtlaAddr = await resolveSrtla(resolved.srtlaAddr);
+			relayAddress ??= await resolveSrtla(resolved.srtlaAddr);
 			const launched = await startStream(
 				resolved.pipeline,
-				srtlaAddr,
+				relayAddress,
 				resolved.srtlaPort,
 				resolved.streamid,
 				{},
 				attemptId,
-				launchConfig,
+				resolved.config,
 				startAudio,
 			);
 			if (!launched.success) {
@@ -284,8 +326,6 @@ async function defaultLaunch(
 			}
 		},
 	});
-
-	const result = await startAudio.whileInFlight(starting);
 	if (result.result === "started") return { ok: true };
 	if (result.result === "busy") return { ok: false, reason: "start_busy" };
 	if (result.result === "cancelled")
@@ -364,9 +404,9 @@ function defaultDeps(): StreamRestorationDeps {
  * NEXT engine death would find an already-attempted marker and give up. Measured
  * on a board: SIGKILL #1 restored in 11.5 s, #2 and #3 did nothing at all.
  *
- * `armedAt` is the compare-and-set token — same shape as the source-selection
- * write token. A failed attempt commits nothing, so nothing re-arms, so the
- * terminal state lands exactly as before.
+ * `armId` distinguishes two launches even when they arm in the same millisecond.
+ * Historical markers have only `armedAt`. A failed attempt does not re-arm,
+ * so its terminal state still lands on the marker it judged.
  */
 function recordAttempt(
 	deps: StreamRestorationDeps,
@@ -376,7 +416,12 @@ function recordAttempt(
 	reason?: RecoveryFailureReason,
 ): void {
 	const current = readArmedStreamMarker(deps.marker);
-	if (current === undefined || current.armedAt !== judged.armedAt) return;
+	if (
+		current === undefined ||
+		current.armId !== judged.armId ||
+		current.armedAt !== judged.armedAt
+	)
+		return;
 	writeArmedStreamMarker(
 		{
 			...current,

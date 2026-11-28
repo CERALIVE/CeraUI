@@ -7,10 +7,13 @@ CeraUI consumes THREE npm producers whose wire data is Zod-validated:
 A pin is a version boundary as well as a path boundary, and the failure mode on
 the wrong side of it is SILENT.
 
-Both cerastream consumers pin published `2026.11.4` (schema `0.26.0`,
-protocol `cerastream-ipc/1`, producer `2ad2349e`). Attempt-scoped Start requires
+Both cerastream consumers pin published `2026.11.6` (schema `0.27.0`,
+protocol `cerastream-ipc/1`, producer `d8f3d8ca`). Attempt-scoped Start requires
 `ATTEMPT_SCOPED_START_FEATURE` from the launch socket itself. No package,
 schema version, or cached capability can grant that authority.
+Local microphone launches also require `MIC_ROUTE_CHECK_FEATURE` on that
+socket. The pin exposes the check and verified Start protocol, not a qualified
+receiver or an upgraded engine.
 The runtime observer opts into status hydration only when the live engine
 advertises the producer's `STATUS_SNAPSHOT_FEATURE` token.
 Nullable capture-selection deltas use producer-owned schemas and require the

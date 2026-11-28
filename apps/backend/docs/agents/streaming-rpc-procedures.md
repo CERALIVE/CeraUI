@@ -46,6 +46,22 @@ The `streaming` router exposes these procedures:
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
 
+### Start settings and next-start saves [EXISTS]
+
+Start captures the effective source, stream settings and audio selection before
+waiting for admission. A retry reuses that attempt's validated config and relay
+address, including the legacy capture-input fallback or its absence. Device
+availability and microphone proof are still checked against live
+evidence; a retry cannot replace the concrete choice already resolved for Auto.
+
+The legacy Start config write is conditional on no intervening config save.
+An applied Start can still persist an explicitly requested audio field if that
+field has not been saved by the operator since the press. A newer settings save
+supplies the next Start, not the current engine request or its restoration
+marker. The separate live `setBitrate` command still adjusts a running stream.
+A heartbeat can reload the live failover policy only after Start is confirmed,
+and sends only that policy, not the other next-start settings.
+
 ### Cleared settings and out-of-date pages [EXISTS]
 
 Every `config` broadcast goes through `broadcastConfig` (`rpc/config-broadcast.ts`), never `broadcastMsg("config", ...)` (`tests/config-broadcast-guard.test.ts` fails on one): after a write that cleared keys clients were sent, it follows the unchanged `config` frame with `config_clear { keys }` (the login snapshot counts as sent). Every `saveConfig` is followed by a check (`modules/config-save-listeners.ts`): a key clients hold that the device no longer has is published in the same tick, also when the disk write fails and when the writer broadcasts nothing. A writer that SETS a value tabs show still calls `broadcastConfig` itself, synchronously after its save. Every clearable setting and writer is a row in `tests/config-clear-sites.test.ts`; a new one adds a row. `GET_CONFIG_KEYS` (`@ceraui/rpc`) equals the keys `getConfig` returns; the frontend's reconnect hydrate depends on it (`tests/config-clear.test.ts`). `start`, `setConfig`, `setSourceVisibility`, `setAudioMix`, `switchInput`, `switchAudio` and `reloadAudioDelay` are gated by the page's build: a UI socket whose page named another build than `/opt/ceralive/build-id` (or none) is refused before its input is read, so before any change or engine call, and sent the notice "This page is out of date. Reload to continue." (key `notifications.uiOutOfDate`; `msg` is the English an older bundle without the key shows). A refused `start` resolves with its own `{ success: false, is_streaming, error: "UI_OUT_OF_DATE" }` (`uiBuildStartMiddleware`), because a page reads a thrown Start as a lost reply and shows nothing; every other call throws (`uiBuildMiddleware`), because the audio pick answers a resolved `success: false` with a second, silent try. Both shapes are pinned on the page from before the check and on today's, each against the real device, in the frontend's `src/tests/harness/refused-live-writes.test.ts`. A page that signs in to a backend of its own build, or to one with no identity, has an earlier backend's notice withdrawn (`syncOutOfDateNotice`). `stop` and `setBitrate` stay open, so a stale page can always end or lower a running stream. The device-control channel and reads are never gated, nor is anything on a backend with no identity (`tests/ui-build-admission.test.ts`; `tests/ui-build-wiring.test.ts` boots the shipped entrypoint).
@@ -95,7 +111,7 @@ fills that value in memory without rewriting the file; an explicit true at
 otherwise default primary settings remains an explicit muted mix.
 Membership and track changes apply at the next start, including with `apply_now`.
 
-The save gate runs before any mutation against `audio_mix` and the selectable
+An explicit mix save is validated before any mutation against `audio_mix` and the selectable
 audio source list. Its errors are `audio_mix_unsupported`, `audio_input_unknown`,
 `audio_inputs_empty`, `audio_input_duplicate`, `audio_inputs_too_many`,
 `audio_tracks_invalid`, `audio_tracks_gap`, `audio_gain_range` and
@@ -108,7 +124,10 @@ Start builds `effectiveAudioInputs` from the saved mix, with an available
 primary added if needed. `projectLaunchAudioInputs` omits unavailable legs
 only if it omits no primary leg from that mix and the surviving legs cover
 every assigned track. Otherwise Start keeps the routing for normal admission
-or refuses an input that cannot be safely resolved. The engine adapter puts the primary
+or refuses an input that cannot be safely resolved. If a saved leg from another
+source is the only input on a track, Start returns `audio_source_unavailable`
+through the normal recovery flow without dispatching or changing saved routing.
+The engine adapter puts the primary
 first, maps the projected IDs to engine selectors, and sends producer-owned
 `audio.inputs` instead of `audio.device`. Projection does not rewrite the
 saved mix. Live value edits target inputs admitted to the running session;
@@ -120,7 +139,14 @@ available mix is full, the pick replaces the previous main or, if that input
 is not in the available mix, the first available entry. Accepted picks
 preserve the relative order of all surviving inputs and save the selection
 and mix in one synchronous write. A pick that would exceed the saved slot
-limit is refused; without `audio_pick` an `asrc` save changes no membership.
+limit is refused. A tagged pick for an unavailable input returns
+`audio_source_unavailable` before writing the preference or mix. An accepted
+write observes the selected route in the same request. If that proof fails,
+the reply is `audio_source_probe_failed`: the preference and any valid mix may
+already be saved, but the unverified input cannot authorize Start. Live does
+not retry with a bare `asrc`; explicitly pick the microphone again to verify it.
+A bare `asrc` write changes no membership and also needs proof before it can
+acknowledge a concrete microphone.
 Idle edits from the Live strips arrive as per-input deltas on
 `setAudioMix`: values, or `include` / `track` for membership and tracks, which
 `changedAudioInputs` composes on the current saved mix (refusing to turn the
@@ -144,12 +170,21 @@ Start request; saves made while it is in flight apply to the next Start only.
 before anything it waits for: the Start RPC, autostart, the set-profile restart. A
 restoration takes it from the armed marker (`restoredStartAudio`). `startStream` has
 no default for it, so no caller launches without one.
+The Start RPC resolves the requested or saved source before freezing audio. The
+same routed pipeline reaches the launch; an embedded-only RTMP or SRT request
+does not check a microphone, even if the saved pipeline was local.
+The shared Start validator passes its normalized launch configuration through
+relay and bond preparation to the engine. A subsequent settings save does not
+replace the source, codec, latency, format, or preview mode already accepted for
+that launch. The armed marker records the launched source and settings rather
+than the next-start selection. Live bitrate remains adjustable during Start.
 Validation, the codec gate, the probe, the engine request, every retry and the armed
 marker read that snapshot (`asrc`, `audio_inputs`, `acodec`, `delay` and
 `audio_backend`), never the saved config.
 An omitted `audio_inputs` on Start uses the saved mix. An explicit `null`
-clears the mix for that Start and for the saved setup, unless a newer save
-owns the field. Clearing the mix does not select "No audio".
+clears the mix for that Start and, if the Start succeeds and no newer save
+owns the field, clears the saved mix and broadcasts `config_clear`.
+Clearing the mix does not select "No audio".
 So a "No audio" Start stays without audio, and a Start pressed with a microphone
 is judged on that microphone: if it does not answer, the Start is refused with
 `audio_source_probe_failed` even when "No audio" was saved meanwhile. Two reads stay
@@ -157,7 +192,11 @@ live on purpose: a card that re-enumerated, as the main input or in the mix, is
 addressed by its new id, and Auto is resolved against the launched source at launch. The Start's own write
 (`StartAudio.unsaved`) leaves out every field saved since the press, even when that
 save repeats the saved value: `setConfig` and `setAudioMix` call
-`noteAudioSaved`, the Start's own write does not. Until a Start is done the
+`noteAudioSaved`, the Start's own write does not. A successful Start writes a
+new concrete microphone only when that launch used it and the engine accepted its
+proof. An embedded-audio Start does not change the saved pick or let a subsequent
+Start enroll a replacement for the ignored selector. Re-pick the microphone to
+establish a new proof. Until a Start is done the
 Bluetooth microphones stay listed for its backend, and `startStream` lists them again
 when another backend was saved before the launch. The compatibility
 start-schema export aliases the published producer schema, preserving its
@@ -168,6 +207,10 @@ next-start saves. Status snapshots, updates and initial hydration carry it;
 Stop, engine idle or connection loss withdraw it. Only an active mix refuses
 `switchAudio` with `audio_mix_active`. A legacy session retains live source
 switching even after a mix is saved.
+A live mixer acknowledgement for a session replaced by Stop and Start replies
+with `stream_ended_before_audio_saved`; it does not edit the successor's mix or
+broadcast saved settings. Stop advances the ownership epoch even before the
+engine acknowledges it, so a live mixer reply during Stop cannot save either.
 
 Status snapshots, the start and stop updates and the first post-sign-in status also carry
 `audio_off_active`: whether the running session was launched without audio by the

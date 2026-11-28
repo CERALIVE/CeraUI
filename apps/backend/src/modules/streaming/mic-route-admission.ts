@@ -1,0 +1,187 @@
+import {
+	AUDIO_SILENCE_INPUT_ID,
+	type AudioConfig,
+	type CheckMicRoutesParams,
+} from "@ceralive/cerastream";
+import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
+import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
+import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { getConfigFilePath } from "../config.ts";
+import {
+	captureMicPickerAttachment,
+	isPseudoAudioSource,
+	resolveAudioMode,
+} from "./audio.ts";
+import {
+	audioInputEngineId,
+	effectiveAudioInputs,
+	planLaunchAudio,
+} from "./audio-inputs.ts";
+import { searchPipelines } from "./pipelines.ts";
+import { getStreamingBackend } from "./streaming-engine.ts";
+
+function isMicSelector(id: string | undefined): id is string {
+	return id !== undefined && id !== "embedded" && id !== AUDIO_SILENCE_INPUT_ID;
+}
+
+export function micRouteKeys(audio: AudioConfig | undefined): string[] {
+	if (audio?.inputs !== undefined)
+		return audio.inputs
+			.map((input) => input.device ?? input.input_id)
+			.filter(isMicSelector);
+	return audio?.device === undefined || audio.mode === "none"
+		? []
+		: [audio.device];
+}
+
+/** A redundant local leg absent now can return before deferred dispatch. */
+export function deferredMixCanUseMic(config: RuntimeConfig): boolean {
+	return (
+		config.audio_inputs?.some(({ id }) =>
+			isMicSelector(audioInputEngineId(id, config)),
+		) ?? false
+	);
+}
+
+export function hasOrderedMicProofs(proofs: readonly string[], count: number) {
+	return proofs.length === count && new Set(proofs).size === count;
+}
+
+export function networkAudioSource(pipeline: string | undefined): boolean {
+	return (
+		pipeline !== undefined &&
+		searchPipelines(pipeline)?.audio_kind === "embedded"
+	);
+}
+
+function observe(config: RuntimeConfig, audio: AudioConfig) {
+	if (shouldUseMocks()) return Promise.resolve(undefined);
+	const request = {
+		audio: { ...audio, backend: config.audio_backend },
+		network: networkAudioSource(config.pipeline),
+		operation: { kind: "admit" },
+	} satisfies CheckMicRoutesParams;
+	return getStreamingBackend().admitMicRoutes(request);
+}
+
+type Admission = Promise<string | undefined>;
+const savedChoices = new WeakMap<
+	RuntimeConfig,
+	{ readonly path: string; readonly proofs: Map<string, Admission> }
+>();
+
+function micChoiceProofs(config: RuntimeConfig) {
+	const path = getConfigFilePath();
+	const current = savedChoices.get(config);
+	if (current?.path === path) return current.proofs;
+	const proofs = new Map<string, Admission>();
+	savedChoices.set(config, { path, proofs });
+	return proofs;
+}
+
+export function noteStartedMicChoice(
+	config: RuntimeConfig,
+	id: string,
+	proof: string | undefined,
+): boolean {
+	const choices = micChoiceProofs(config);
+	// A repeated Start payload is not a new picker choice. Do not let an
+	// ignored selector enroll a different occupant on the next Start.
+	if (proof !== undefined || !choices.has(id))
+		choices.set(id, Promise.resolve(proof));
+	return proof !== undefined;
+}
+
+export function captureMicChoices(ids: readonly string[]) {
+	return [...new Set(ids)]
+		.filter((id) => id !== AUDIO_SOURCE_AUTO && !isPseudoAudioSource(id))
+		.map((id) => ({ id, current: captureMicPickerAttachment(id) }));
+}
+
+/** The proof is usable only if the listed attachment spans engine observation. */
+export function noteMicChoices(
+	config: RuntimeConfig,
+	selected: ReturnType<typeof captureMicChoices>,
+): Promise<boolean> | undefined {
+	if (shouldUseMocks()) return undefined;
+	const choicesToObserve = selected.flatMap(({ id, current }) => {
+		const device = config.audio_inputs?.some((input) => input.id === id)
+			? audioInputEngineId(id, config)
+			: resolveAudioMode(id, false).device;
+		return isMicSelector(device) ? [{ id, device, current }] : [];
+	});
+	const [first, second] = choicesToObserve;
+	if (first === undefined) return undefined;
+	const choices = micChoiceProofs(config);
+	const observed = (async () => {
+		if (!choicesToObserve.every(({ current }) => current())) return undefined;
+		const proofs = await observe(
+			config,
+			second === undefined
+				? { mode: "device", device: first.device }
+				: {
+						mode: "default",
+						inputs: choicesToObserve.map(({ device }) => ({
+							input_id: device,
+							tracks: [1],
+						})),
+					},
+		);
+		return proofs !== undefined &&
+			hasOrderedMicProofs(proofs, choicesToObserve.length) &&
+			choicesToObserve.every(({ current }) => current())
+			? proofs
+			: undefined;
+	})();
+	for (const [index, { id }] of choicesToObserve.entries())
+		choices.set(
+			id,
+			observed.then((proofs) => proofs?.[index]),
+		);
+	return observed.then((proofs) => proofs !== undefined);
+}
+
+/** Freeze the used legs at Start acceptance (or the concrete Auto decision). */
+export function captureSavedMicProofs(config: RuntimeConfig) {
+	const choices = savedChoices.get(config);
+	return choices?.path === getConfigFilePath()
+		? new Map(choices.proofs)
+		: new Map<string, Admission>();
+}
+
+export function freezeMicChoices(
+	config: RuntimeConfig,
+	saved: ReadonlyMap<string, Admission>,
+	prior: ReadonlyMap<string, Admission> = new Map(),
+	audioOff?: boolean,
+): ReadonlyMap<string, Admission> | null {
+	const plan = planLaunchAudio(config, { audioOff });
+	if (plan === null) return null;
+	const keys = micRouteKeys(plan);
+	const accepted = new Map(prior);
+	if (plan === undefined || keys.length === 0) return accepted;
+	const ids =
+		plan.inputs === undefined
+			? [config.asrc]
+			: keys.map(
+					(key) =>
+						effectiveAudioInputs(config)?.find(
+							({ id }) => audioInputEngineId(id, config) === key,
+						)?.id,
+				);
+	let pending: ReturnType<typeof observe> | undefined;
+	for (const [index, id] of ids.entries()) {
+		if (id === undefined || accepted.has(id)) continue;
+		const choice = saved.get(id);
+		if (choice !== undefined) {
+			accepted.set(id, choice);
+		} else {
+			pending ??= observe(config, plan);
+			accepted.set(
+				id,
+				pending.then((proofs) => proofs?.[index]),
+			);
+		}
+	}
+	return accepted;
+}

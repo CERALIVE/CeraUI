@@ -46,7 +46,6 @@ import {
 import type { PreviewEncodeMode } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
-import { getConfig } from "../config.ts";
 
 /**
  * `unreachable` — the engine could not be reached or did not answer.
@@ -111,14 +110,15 @@ async function defaultTransport(mode: PreviewEncodeMode): Promise<void> {
 }
 
 /**
- * Assert the persisted preview-encoder mode against the engine.
+ * Assert the preview-encoder mode accepted for this launch against the engine.
  *
  * Resolves `ok` with `replayed: undefined` — opening no connection at all — when
  * the operator has never stated a preference, so a device that never touched the
  * toggle behaves exactly as it did before this path existed.
  */
-export async function replayPreviewEncodeMode(): Promise<PreviewEncodeReplayResult> {
-	const mode = getConfig().previewEncode;
+export async function replayPreviewEncodeMode(
+	mode: PreviewEncodeMode | undefined,
+): Promise<PreviewEncodeReplayResult> {
 	if (mode === undefined) return { ok: true, replayed: undefined };
 
 	const transport = transportOverride ?? defaultTransport;

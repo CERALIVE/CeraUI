@@ -21,6 +21,10 @@ import {
 	getAudioMixInputs,
 } from "../../modules/streaming/audio-mix-status.ts";
 import { cerastreamBackend } from "../../modules/streaming/cerastream-backend.ts";
+import {
+	captureMicChoices,
+	noteMicChoices,
+} from "../../modules/streaming/mic-route-admission.ts";
 import { noteAudioSaved } from "../../modules/streaming/start-audio.ts";
 import { captureLiveWriteFence } from "../../modules/streaming/stream-session-orchestrator.ts";
 import { broadcastConfig } from "../config-broadcast.ts";
@@ -38,12 +42,21 @@ export const setAudioMixProcedure = os
 		const config = getConfig();
 		// Composed and written in this synchronous stretch, so edits serialize.
 		if (include !== undefined || track !== undefined) {
+			const previouslyIncluded = effectiveAudioInputs(config)?.some(
+				(input) => input.id === id,
+			);
 			const changed = changedAudioInputs(config, id, { include, track });
 			if ("error" in changed) return { success: false, error: changed.error };
+			const micChoices = captureMicChoices(
+				include === true && !previouslyIncluded ? [id] : [],
+			);
 			config.audio_inputs = storedAudioInputs(changed.inputs, config);
 			noteAudioSaved("audio_inputs");
 			saveConfig();
+			const observedMicChoice = noteMicChoices(config, micChoices);
 			broadcastConfig(config);
+			if (observedMicChoice !== undefined && !(await observedMicChoice))
+				return { success: false, error: "audio_source_probe_failed" };
 			const entry = changed.inputs.find((input) => input.id === id);
 			return {
 				success: true,

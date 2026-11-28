@@ -5,6 +5,7 @@ import {
 	CerastreamConnectionError,
 	CerastreamRpcError,
 	compositionLayoutSchema,
+	MIC_ROUTE_CHECK_FEATURE,
 	RPC_ERROR_NUMERIC,
 	type RpcErrorCode,
 	rpcErrorCodeSchema,
@@ -22,16 +23,18 @@ export function hasStartRpcCode(error: unknown, code: RpcErrorCode): boolean {
 	);
 }
 
-export async function supportsScopedStart(
-	client: CerastreamClient,
-): Promise<boolean> {
+export async function readLaunchCapabilities(client: CerastreamClient) {
 	// Known older schemas predate Prepare/Cancel; preserve their launch traffic.
 	// A newer or unrecognized version still needs affirmative socket evidence.
 	if (Bun.semver.satisfies(client.hello.schema_version, "<0.25.0"))
-		return false;
+		return { scoped: false, micRouteCheck: false, audioBackend: undefined };
 	try {
-		const { features } = await client.getCapabilities();
-		return features?.includes(ATTEMPT_SCOPED_START_FEATURE) === true;
+		const { features, audio_backends } = await client.getCapabilities();
+		return {
+			scoped: features?.includes(ATTEMPT_SCOPED_START_FEATURE) === true,
+			micRouteCheck: features?.includes(MIC_ROUTE_CHECK_FEATURE) === true,
+			audioBackend: audio_backends?.active,
+		};
 	} catch (error) {
 		throw new CerastreamConnectionError(
 			"Could not confirm streaming engine capabilities",
@@ -46,7 +49,8 @@ export async function cancelScopedStart(
 ): Promise<void> {
 	const client = await connect();
 	try {
-		if (await supportsScopedStart(client)) await client.cancelStart(attempt);
+		if ((await readLaunchCapabilities(client)).scoped)
+			await client.cancelStart(attempt);
 	} catch (error) {
 		if (!hasStartRpcCode(error, codes["cerastream.state.not_owner"]))
 			throw error;
@@ -71,7 +75,8 @@ export function startRefusedBeforeAdmission(
 	if (
 		schemaVersion !== "0.24.0" &&
 		schemaVersion !== "0.25.0" &&
-		schemaVersion !== "0.26.0"
+		schemaVersion !== "0.26.0" &&
+		schemaVersion !== "0.27.0"
 	)
 		return false;
 	const composition = params.composition;

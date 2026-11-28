@@ -71,8 +71,13 @@ import {
 	noteStreamedSourceCommitted,
 	resetEngineDeviceCache,
 } from "../modules/streaming/sources.ts";
+import { acceptStartAudio } from "../modules/streaming/start-audio.ts";
 import { createStreamSessionOrchestrator } from "../modules/streaming/stream-session-orchestrator.ts";
-import { updateConfig, updateStatus } from "../modules/streaming/streaming.ts";
+import {
+	saveAppliedStartAudio,
+	updateConfig,
+	updateStatus,
+} from "../modules/streaming/streaming.ts";
 import { setAutostart } from "../modules/streaming/streamloop/autostart.ts";
 import {
 	kioskStart,
@@ -463,21 +468,6 @@ describe("through the streaming writers", () => {
 				{ srtla_addr: "127.0.0.1", srtla_port: 5000, srt_streamid: "s" },
 			],
 			[
-				"resolution, framerate, audio_inputs: a start that carries them",
-				START,
-				() =>
-					updateConfig({
-						resolution: "1080p",
-						framerate: 30,
-						audio_inputs: [{ ...MIX, mute: true }],
-					}),
-				{
-					resolution: "1080p",
-					framerate: 30,
-					audio_inputs: [{ ...MIX, mute: true }],
-				},
-			],
-			[
 				"selected_video_input: a live switch to a camera",
 				{ asrc: "Primary" },
 				() =>
@@ -510,6 +500,35 @@ describe("through the streaming writers", () => {
 			expect(told()).toEqual(stored());
 			expect(told()).toMatchObject(expected);
 		});
+
+	test("set, resolution, framerate, audio_inputs: a start that carries them", async () => {
+		Object.assign(getConfig(), START);
+		const input = {
+			resolution: "1080p" as const,
+			framerate: 30 as const,
+			audio_inputs: [{ ...MIX, mute: true }],
+		};
+		const audio = acceptStartAudio(input);
+
+		expect(await heardFrom(() => updateConfig(input, audio))).toEqual([
+			"config",
+		]);
+		expect(told()).toEqual(stored());
+		expect(told()).toMatchObject({ resolution: "1080p", framerate: 30 });
+		expect(told()).not.toHaveProperty("audio_inputs");
+
+		audio.verifiedMicChoices.set(MIX.id, `mic-report-v1:${"a".repeat(64)}`);
+		expect(
+			await heardFrom(() =>
+				saveAppliedStartAudio(audio, {
+					pipeline: { supportsAudio: true },
+					config: getConfig(),
+				}),
+			),
+		).toEqual(["config"]);
+		expect(told()).toEqual(stored());
+		expect(told()).toMatchObject(input);
+	});
 
 	// Heard twice: the write that stages it, and the commit once it is applied.
 	for (const [name, config, input, heard] of [

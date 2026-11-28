@@ -64,7 +64,10 @@ import type {
 	StreamSourceBase,
 } from "@ceraui/rpc/schemas";
 import { framerateSchema, resolutionSchema } from "@ceraui/rpc/schemas";
-import type { LastSeenDevice } from "../../helpers/config-schemas.ts";
+import type {
+	LastSeenDevice,
+	RuntimeConfig,
+} from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
 import { broadcastConfig } from "../../rpc/config-broadcast.ts";
@@ -1093,9 +1096,11 @@ export function configuredSelectionAnchor(
  * camera simply stops being remembered. Superseding and clearing are the same
  * operation here, which is why there is no separate clear path.
  */
-export function noteStreamedSourceCommitted(): boolean {
+export function noteStreamedSourceCommitted(
+	accepted: Pick<RuntimeConfig, "source" | "source_stable_id"> = getConfig(),
+): boolean {
 	const config = getConfig();
-	const configured = config.source;
+	const configured = accepted.source;
 	if (configured === undefined) return false;
 
 	const sources = getSourcesMessage().sources;
@@ -1106,7 +1111,7 @@ export function noteStreamedSourceCommitted(): boolean {
 		configured,
 		sources,
 		config.last_seen_devices,
-		configuredSelectionAnchor(configured),
+		accepted.source_stable_id,
 	);
 	const stableId = resolveSelectionAnchor(sourceId, sources);
 	if (

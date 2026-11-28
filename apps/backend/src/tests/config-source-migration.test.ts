@@ -27,7 +27,10 @@ import {
 	resolveSourceRouting,
 } from "../modules/streaming/sources.ts";
 import { noteStreamSessionEngineStatus } from "../modules/streaming/stream-session-orchestrator.ts";
-import { updateStatus } from "../modules/streaming/streaming.ts";
+import {
+	type AcceptedStartConfig,
+	updateStatus,
+} from "../modules/streaming/streaming.ts";
 import {
 	setConfigProcedure,
 	setStreamingProcedureDepsForTest,
@@ -394,7 +397,7 @@ describe("source routing stays isolated from cerastream-backend.ts", () => {
 
 // session.start stand-in: records every launch so we can prove it is skipped on a
 // rejected source and dispatches the resolved pipeline on a known one.
-const startSpy = mock(async (_conn: unknown, _params: unknown) => ({
+const startSpy = mock(async (_conn: unknown, _start: AcceptedStartConfig) => ({
 	success: true as const,
 }));
 
@@ -538,14 +541,10 @@ describe("streaming procedures — device-first source resolution", () => {
 		);
 		expect(result.success).toBe(true);
 		expect(startSpy).toHaveBeenCalledTimes(1);
-		const dispatched = startSpy.mock.calls[0]?.[1] as {
-			pipeline?: string;
-			source?: string;
-			selected_video_input?: string;
-		};
-		expect(dispatched.pipeline).toBe("test");
-		expect(dispatched.source).toBe("test");
-		expect(dispatched.selected_video_input).toBeUndefined();
+		const dispatched = startSpy.mock.calls[0]?.[1].params;
+		expect(dispatched?.pipeline).toBe("test");
+		expect(dispatched?.source).toBe("test");
+		expect(dispatched?.selected_video_input).toBeUndefined();
 	});
 
 	// F2 Bug 1: with no persisted config.source, asserting dispatched.source (the
@@ -566,14 +565,10 @@ describe("streaming procedures — device-first source resolution", () => {
 
 		expect(result.success).toBe(true);
 		expect(startSpy).toHaveBeenCalledTimes(1);
-		const dispatched = startSpy.mock.calls[0]?.[1] as {
-			pipeline?: string;
-			source?: string;
-			selected_video_input?: string;
-		};
-		expect(dispatched.source).toBe("video0");
-		expect(dispatched.pipeline).toBe("hdmi");
-		expect(dispatched.selected_video_input).toBe("video0");
+		const dispatched = startSpy.mock.calls[0]?.[1].params;
+		expect(dispatched?.source).toBe("video0");
+		expect(dispatched?.pipeline).toBe("hdmi");
+		expect(dispatched?.selected_video_input).toBe("video0");
 		expect(result.applied?.source).toBe("video0");
 		expect(result.applied?.pipeline).toBe("hdmi");
 		expect(result.applied?.selected_video_input).toBe("video0");

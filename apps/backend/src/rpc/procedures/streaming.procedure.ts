@@ -113,6 +113,10 @@ import { deviceRegistry } from "../../modules/streaming/devices.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { isGatewayActive } from "../../modules/streaming/gateway-availability.ts";
 import { getStreamHealth } from "../../modules/streaming/health.ts";
+import {
+	captureMicChoices,
+	noteMicChoices,
+} from "../../modules/streaming/mic-route-admission.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import {
 	getEffectiveHardware,
@@ -137,10 +141,7 @@ import {
 	resolveSourceIdentity,
 	resolveSourceRouting,
 } from "../../modules/streaming/sources.ts";
-import {
-	acceptStartAudio,
-	noteAudioSaved,
-} from "../../modules/streaming/start-audio.ts";
+import { noteAudioSaved } from "../../modules/streaming/start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -150,7 +151,10 @@ import {
 	startStreamSession,
 	stopStreamSession,
 } from "../../modules/streaming/stream-session-orchestrator.ts";
-import { getIsStreaming } from "../../modules/streaming/streaming.ts";
+import {
+	acceptStartConfig,
+	getIsStreaming,
+} from "../../modules/streaming/streaming.ts";
 import {
 	getConfiguredEngine,
 	getStreamingBackend,
@@ -270,53 +274,74 @@ export const streamingStartProcedure = authedProcedure
 	.handler(async ({ input, context }) => {
 		let appliedResponse: StreamingConfigInput | undefined;
 		let legacyError: string | undefined;
-		const startAudio = acceptStartAudio(input);
-		const starting = startStreamSession({
-			origin:
-				context.ws.remoteAddress === "control-channel"
-					? "remote-control"
-					: "ui",
-			launch: async ({ attemptId, generation }) => {
-				const applied: StreamingConfigInput = {
-					...input,
-					...(input.max_br !== undefined
-						? { max_br: clampBitrate(input.max_br) }
-						: {}),
-					...(input.srt_latency !== undefined
-						? { srt_latency: Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS) }
-						: {}),
-				};
-
-				// Device-first source pre-validation (T3). Resolve the EFFECTIVE source
-				// (this start's input, else the persisted post-coercion config.source)
-				// HERE, before delegating: an unknown source rejects WITHOUT calling
-				// session.start (session.ts swallows updateConfig errors, so the reject
-				// must happen at this layer). A known source folds its derived pipeline +
-				// recomputed selected_video_input into `applied` so the launch dispatches
-				// the resolved pipeline through the existing offered-set gate below.
-				const effectiveSource = input.source ?? getConfig().source;
-				if (effectiveSource !== undefined) {
-					const routed = resolveSourceRouting(
+		// Admission can observe the engine immediately. Route the effective source
+		// first, so both the audio snapshot and dispatch use the same pipeline.
+		const saved = getConfig();
+		const effectiveSource = input.source ?? saved.source;
+		const sources =
+			effectiveSource === undefined
+				? []
+				: streamingProcedureDeps.getSourcesMessage().sources;
+		const routed =
+			effectiveSource === undefined
+				? undefined
+				: resolveSourceRouting(
 						effectiveSource,
-						streamingProcedureDeps.getSourcesMessage().sources,
-						getConfig().last_seen_devices,
+						sources,
+						saved.last_seen_devices,
 						input.source === undefined
 							? configuredSelectionAnchor(effectiveSource)
 							: undefined,
 					);
-					if (!routed.ok) {
-						legacyError = routed.error;
-						throwStartFailure("params", new Error(routed.error), attemptId);
-					}
-					applied.pipeline = routed.pipeline;
-					applied.selected_video_input = routed.selected_video_input;
-					applied.source = effectiveSource;
+		const routedInput = routed?.ok
+			? {
+					...input,
+					pipeline: routed.pipeline,
+					selected_video_input: routed.selected_video_input,
+					source: effectiveSource,
 				}
+			: input;
+		const applied: StreamingConfigInput = {
+			...routedInput,
+			...(input.max_br !== undefined
+				? { max_br: clampBitrate(input.max_br) }
+				: {}),
+			...(input.srt_latency !== undefined
+				? { srt_latency: Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS) }
+				: {}),
+		};
+		const accepted =
+			routed?.ok === false
+				? routed
+				: {
+						ok: true as const,
+						snapshot: acceptStartConfig(applied, saved, {
+							stableId:
+								input.source === undefined
+									? (saved.source_stable_id ??
+										(effectiveSource === undefined
+											? undefined
+											: resolveSelectionAnchor(effectiveSource, sources)))
+									: resolveSelectionAnchor(input.source, sources),
+						}),
+					};
+		const lifecycleResult = await startStreamSession({
+			origin:
+				context.ws.remoteAddress === "control-channel"
+					? "remote-control"
+					: "ui",
+			audio: accepted.ok ? accepted.snapshot.audio : undefined,
+			launch: async ({ attemptId, generation }) => {
+				if (!accepted.ok) {
+					legacyError = accepted.error;
+					throwStartFailure("params", new Error(accepted.error), attemptId);
+				}
+				const { audio: startAudio, params } = accepted.snapshot;
 
 				// Block start when the effective pipeline is not in the offered set — a
 				// persisted pipeline the current hardware no longer offers. No silent
 				// reset; the client surfaces the structured code so the operator re-picks.
-				const effectivePipeline = applied.pipeline ?? getConfig().pipeline;
+				const effectivePipeline = params.pipeline;
 				if (effectivePipeline !== undefined) {
 					const check = streamingProcedureDeps.validatePersistedPipeline(
 						effectivePipeline,
@@ -355,8 +380,7 @@ export const streamingStartProcedure = authedProcedure
 				// SAVES stay permitted (mirrors the pipeline_not_in_offered_set gate).
 				const effectiveAcodec = startAudio.config.acodec;
 				if (effectiveAcodec !== undefined) {
-					const effectiveTransport =
-						applied.relay_protocol ?? getConfig().relay_protocol ?? "srtla";
+					const effectiveTransport = params.relay_protocol ?? "srtla";
 					if (
 						!audioCodecAllowedForTransport(effectiveAcodec, effectiveTransport)
 					) {
@@ -389,18 +413,17 @@ export const streamingStartProcedure = authedProcedure
 					// is_streaming on then immediately errors and flips it off. Simulate
 					// a sustained stream so getIsStreaming() drives the UI as on device.
 					setMockEncoderConfig({
-						pipeline: applied.pipeline,
-						bitrate_overlay: applied.bitrate_overlay,
-						resolution: applied.resolution,
-						framerate: applied.framerate,
-						max_br: applied.max_br,
+						pipeline: params.pipeline,
+						bitrate_overlay: params.bitrate_overlay,
+						resolution: params.resolution,
+						framerate: params.framerate,
+						max_br: params.max_br,
 					});
 					const config = {
-						...getConfig(),
-						...applied,
+						...params,
 						...startAudio.config,
-						composition: applied.composition ?? getConfig().composition,
-						video_codec: applied.video_codec ?? getConfig().video_codec,
+						composition: params.composition ?? undefined,
+						video_codec: params.video_codec ?? undefined,
 					};
 					const audio = launchAudioPlan(config, { attemptId });
 					// What the engine adapter hands over at a real start, after
@@ -410,7 +433,7 @@ export const streamingStartProcedure = authedProcedure
 						isCompositionSupported(getLastCapabilities())
 							? config.composition
 							: undefined;
-					const params: StartParams = {
+					const mockStartParams: StartParams = {
 						pipeline: config.pipeline ?? "test",
 						srt: {
 							host: "127.0.0.1",
@@ -426,7 +449,7 @@ export const streamingStartProcedure = authedProcedure
 						...(composition === undefined ? {} : { composition }),
 					};
 					try {
-						startMockStreaming(params);
+						startMockStreaming(mockStartParams);
 					} catch (error) {
 						if (!hasStartRpcCode(error, "cerastream.audio.device_not_found"))
 							throw error;
@@ -453,10 +476,9 @@ export const streamingStartProcedure = authedProcedure
 				// state we report back.
 				const startResult = await streamingProcedureDeps.startStream(
 					context.ws as unknown as import("ws").default,
-					applied,
+					accepted.snapshot,
 					generation,
 					attemptId,
-					startAudio,
 				);
 				if (!startResult.success) {
 					legacyError = startResult.error;
@@ -479,7 +501,6 @@ export const streamingStartProcedure = authedProcedure
 				appliedResponse = applied;
 			},
 		});
-		const lifecycleResult = await startAudio.whileInFlight(starting);
 		return startResponse(lifecycleResult, appliedResponse, legacyError);
 	});
 
@@ -921,11 +942,12 @@ export const setConfigProcedure = liveWriteProcedure
 		delete input.composition_patch;
 
 		// Read and written in this synchronous stretch, so picks serialize.
+		const pickerAsrc = input.audio_pick === true ? input.asrc : undefined;
 		const audioInputs =
 			input.audio_inputs !== undefined
 				? input.audio_inputs
-				: input.audio_pick === true && input.asrc !== undefined
-					? pickedAudioInputs(input.asrc, config)
+				: pickerAsrc !== undefined
+					? pickedAudioInputs(pickerAsrc, config)
 					: undefined;
 		const audioConfig = {
 			...config,
@@ -934,22 +956,30 @@ export const setConfigProcedure = liveWriteProcedure
 			composition: config.composition,
 			video_codec: config.video_codec,
 		};
-		if (
-			input.audio_pick === true &&
-			input.asrc !== undefined &&
-			!canPickAudioInput(audioConfig, input.asrc)
-		)
+		if (pickerAsrc !== undefined && !canPickAudioInput(audioConfig, pickerAsrc))
 			return { success: false, error: "audio_source_unavailable", applied: {} };
 		if (audioInputs != null) {
 			const error = validateAudioInputs(
 				audioInputs,
 				audioConfig,
-				input.audio_inputs === undefined && input.asrc !== undefined
-					? { id: input.asrc }
+				input.audio_inputs === undefined && pickerAsrc !== undefined
+					? { id: pickerAsrc }
 					: undefined,
 			);
 			if (error !== undefined) return { success: false, error, applied: {} };
 		}
+		const storedMix =
+			audioInputs === undefined
+				? undefined
+				: storedAudioInputs(audioInputs, audioConfig);
+		const micChoices = captureMicChoices([
+			...(input.asrc === undefined ? [] : [input.asrc]),
+			...(storedMix ?? [])
+				.filter(
+					({ id }) => !config.audio_inputs?.some((input) => input.id === id),
+				)
+				.map(({ id }) => id),
+		]);
 
 		// Apply-now splits the save in two: the restart-requiring fields are held
 		// back (staged, never written) so `config.json` keeps describing what the
@@ -1004,7 +1034,7 @@ export const setConfigProcedure = liveWriteProcedure
 			noteAudioSaved("asrc");
 		}
 		if (audioInputs !== undefined) {
-			config.audio_inputs = storedAudioInputs(audioInputs, audioConfig);
+			config.audio_inputs = storedMix;
 			noteAudioSaved("audio_inputs");
 		}
 		// Never staged behind `apply_now`: the engine fixes its audio backend when
@@ -1180,6 +1210,7 @@ export const setConfigProcedure = liveWriteProcedure
 		}
 
 		saveConfig();
+		const observedMicChoices = noteMicChoices(config, micChoices);
 		broadcastConfig(config);
 		reportActiveProfile();
 		if (input.audio_backend !== undefined) {
@@ -1203,6 +1234,8 @@ export const setConfigProcedure = liveWriteProcedure
 			syncAudioMeterPreference();
 		}
 
+		if (observedMicChoices !== undefined && !(await observedMicChoices))
+			return { success: false, error: "audio_source_probe_failed", applied };
 		if (marker === undefined) return { success: true, applied };
 
 		// Staged in the same synchronous stretch as the orchestrator's admission,

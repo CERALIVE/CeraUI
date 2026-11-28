@@ -26,7 +26,7 @@ export type LaunchTransaction = {
 	) => Promise<Resource>;
 	readonly runPhase: <Result>(
 		phase: StartDeadlinePhase,
-		operation: () => Promise<Result>,
+		operation: (assertCurrent: () => void) => Promise<Result>,
 		errorPhase?: (error: unknown) => StartDeadlinePhase,
 	) => Promise<Result>;
 	readonly rollback: () => Promise<void>;
@@ -70,21 +70,26 @@ export function createLaunchTransaction(
 	};
 	const runPhase = async <Result>(
 		phase: StartDeadlinePhase,
-		operation: () => Promise<Result>,
+		operation: (assertCurrent: () => void) => Promise<Result>,
 		errorPhase: (error: unknown) => StartDeadlinePhase = () => phase,
 	): Promise<Result> => {
 		let timer: LaunchTimer | undefined;
 		let deadlineExpired = false;
+		const budget = START_PHASE_DEADLINES_MS[phase];
+		const deadline = performance.now() + budget;
+		const timeoutError = () => new CerastreamTimeoutError(phase, budget);
 		const timeout = new Promise<never>((_resolve, reject) => {
 			timer = timers.schedule(() => {
 				deadlineExpired = true;
-				reject(
-					new CerastreamTimeoutError(phase, START_PHASE_DEADLINES_MS[phase]),
-				);
-			}, START_PHASE_DEADLINES_MS[phase]);
+				reject(timeoutError());
+			}, budget);
 		});
 		try {
-			return await Promise.race([operation(), timeout]);
+			const assertCurrent = () => {
+				if (deadlineExpired || performance.now() >= deadline)
+					throw timeoutError();
+			};
+			return await Promise.race([operation(assertCurrent), timeout]);
 		} catch (error) {
 			if (error instanceof StreamStartFailure) throw error;
 			throw new StreamStartFailure(
@@ -123,6 +128,6 @@ export function createLaunchTransaction(
 			return rollbackPromise;
 		},
 	};
-	registerLaunchRollback({ kind: "transaction", run: transaction.rollback });
+	registerLaunchRollback({ kind: "pre-dispatch", run: transaction.rollback });
 	return transaction;
 }

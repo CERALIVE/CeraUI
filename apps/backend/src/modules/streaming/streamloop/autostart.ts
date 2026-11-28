@@ -28,10 +28,11 @@ import { getConfig, saveConfig } from "../../config.ts";
 import { emitEvent } from "../../events/emit.ts";
 import { isUpdating } from "../../system/software-updates.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
-import type { Pipeline } from "../pipelines.ts";
+import { deviceRegistry } from "../devices.ts";
 import { awaitRecoveryBarrier } from "../recovery-barrier.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
 import { acceptStartAudio } from "../start-audio.ts";
+import { mergePersistedStartConfig } from "../start-config-merge.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -116,15 +117,18 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 
 	// If the config is invalid, then we won't ever be able to start, so don't retry
 	const config = getConfig();
-	const startAudio = acceptStartAudio();
-	let c: {
-		pipeline: Pipeline;
-		srtlaAddr: string;
-		srtlaPort: number;
-		streamid: string;
-	};
+	const sourceStableId = config.source_stable_id;
+	const selectedVideoInput =
+		config.selected_video_input ?? deviceRegistry.getActiveInput();
+	const startAudio = acceptStartAudio({}, config);
+	let c: Awaited<ReturnType<typeof validateConfig>>;
 	try {
-		c = await validateConfig(config);
+		c = await validateConfig(
+			{ ...mergePersistedStartConfig(config, {}), ...startAudio.config },
+			startAudio,
+		);
+		c.config.source_stable_id = sourceStableId;
+		c.config.selected_video_input = selectedVideoInput;
 	} catch (err) {
 		logger.error("autostart failed", { err });
 		try {
@@ -150,18 +154,20 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 		return;
 	}
 
-	const starting = startStreamSession({
+	let relayAddress: string | undefined;
+	const result = await startStreamSession({
 		origin: "autostart",
+		audio: startAudio,
 		launch: async ({ attemptId }) => {
-			const srtlaAddr: string = await resolveSrtla(c.srtlaAddr);
+			relayAddress ??= await resolveSrtla(c.srtlaAddr);
 			const launched = await startStream(
 				c.pipeline,
-				srtlaAddr,
+				relayAddress,
 				c.srtlaPort,
 				c.streamid,
 				{},
 				attemptId,
-				undefined,
+				c.config,
 				startAudio,
 			);
 			if (!launched.success) {
@@ -178,7 +184,6 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 			}
 		},
 	});
-	const result = await startAudio.whileInFlight(starting);
 	if (result.result === "failed") {
 		logger.error("autostart failed", {
 			attemptId: result.attemptId,

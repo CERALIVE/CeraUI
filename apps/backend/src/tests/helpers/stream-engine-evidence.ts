@@ -1,11 +1,15 @@
 import type {
 	CerastreamClient,
+	CheckMicRoutesParams,
+	CheckMicRoutesResult,
 	EventParams,
 	StartParams,
 } from "@ceralive/cerastream";
 import {
+	ATTEMPT_SCOPED_START_FEATURE,
 	CerastreamRpcError,
 	CerastreamTimeoutError,
+	MIC_ROUTE_CHECK_FEATURE,
 } from "@ceralive/cerastream";
 import type { LifecycleState } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
@@ -16,6 +20,7 @@ import {
 } from "../../modules/streaming/cerastream-backend.ts";
 import { createLaunchTransaction } from "../../modules/streaming/launch-transaction.ts";
 import { createStreamSessionOrchestrator } from "../../modules/streaming/stream-session-orchestrator.ts";
+import type { StreamRunOptions } from "../../modules/streaming/streaming-backend.ts";
 
 const config = {
 	max_br: 8000,
@@ -33,15 +38,25 @@ const unused = async (): Promise<never> => {
 	throw new Error("unexpected fake engine operation");
 };
 
+// Old wire fixtures exercise the sole address-only launch policy: legacy restore.
+export const legacyAddressOnlyAudio = {
+	attemptId: "legacy-address-only-restore",
+	legacyAddressOnly: true,
+	expected: unused,
+	applied: () => undefined,
+} satisfies NonNullable<StreamRunOptions["micRoute"]>;
+
 /** Engine truth changes at effect submission/ack, never from a production guard. */
 export function evidenceHarness(
 	protectedAtBoot = false,
 	{
 		schemaVersion = "0.1.0",
 		connectPeer,
+		micRoutes,
 	}: {
 		readonly schemaVersion?: string;
 		readonly connectPeer?: CerastreamBackendDeps["connect"];
+		readonly micRoutes?: (params: CheckMicRoutesParams) => CheckMicRoutesResult;
 	} = {},
 ) {
 	let engine: "idle" | "streaming" = "idle";
@@ -123,7 +138,11 @@ export function evidenceHarness(
 				if (index === 0) await startGate;
 				if (lostStartReply !== undefined) throw lostStartReply;
 				if (failedStart) throw new CerastreamTimeoutError("start", 10_000);
-				return { state: "streaming" as const, session_id: `session-${index}` };
+				return {
+					state: "streaming" as const,
+					session_id: `session-${index}`,
+					attempt_id: params.attempt_id,
+				};
 			} finally {
 				startSettled.resolve();
 			}
@@ -135,8 +154,24 @@ export function evidenceHarness(
 				engine_version: "fake",
 			},
 			start,
-			prepareStart: unused,
-			cancelStart: unused,
+			prepareStart:
+				micRoutes === undefined
+					? unused
+					: async () => ({
+							attempt_id: crypto.randomUUID(),
+							expires_in_ms: 30_000,
+						}),
+			getAudioMix: unused,
+			setMeterTargets: unused,
+			switchAudio: unused,
+			cancelStart:
+				micRoutes === undefined ? unused : async (attempt) => attempt,
+			...(micRoutes === undefined
+				? {}
+				: {
+						checkMicRoutes: async (params: CheckMicRoutesParams) =>
+							micRoutes(params),
+					}),
 			// Newer schemas send Start through the raw request path.
 			...(schemaVersion === "0.1.0"
 				? {}
@@ -189,6 +224,11 @@ export function evidenceHarness(
 					bitrate_range: { min: 1, max: 8000, unit: "kbps" },
 				},
 				sources: [],
+				...(micRoutes === undefined
+					? {}
+					: {
+							features: [ATTEMPT_SCOPED_START_FEATURE, MIC_ROUTE_CHECK_FEATURE],
+						}),
 			}),
 			changeConfig: unused,
 			previewSession: unused,
@@ -291,20 +331,38 @@ export function evidenceHarness(
 				if (delay === ms) return timers.get(timer);
 			return undefined;
 		},
-		start: (override: Partial<RuntimeConfig> = {}) => {
+		start: (
+			override: Partial<RuntimeConfig> = {},
+			micRoute?: StreamRunOptions["micRoute"],
+		) => {
 			const transaction = createLaunchTransaction("evidence", {
 				timers: { schedule, cancel },
 			});
+			let subscribed = false;
 			return session.start({
 				origin: "ui",
 				launch: () =>
-					backend.start({ ...config, ...override }, options, {
-						...transaction,
-						runPhase: (phase, operation, errorPhase) => {
-							if (phase === "start-rpc") beforeDispatch?.();
-							return transaction.runPhase(phase, operation, errorPhase);
+					backend.start(
+						{ ...config, ...override },
+						micRoute === undefined ? options : { ...options, micRoute },
+						{
+							...transaction,
+							acquirePhase: async (phase, operation, cleanup, errorPhase) => {
+								const acquired = await transaction.acquirePhase(
+									phase,
+									operation,
+									cleanup,
+									errorPhase,
+								);
+								if (phase === "subscribe") subscribed = true;
+								return acquired;
+							},
+							runPhase: (phase, operation, errorPhase) => {
+								if (subscribed && phase === "start-rpc") beforeDispatch?.();
+								return transaction.runPhase(phase, operation, errorPhase);
+							},
 						},
-					}),
+					),
 			});
 		},
 		beforeStartDispatch: (action: () => void) => {

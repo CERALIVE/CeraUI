@@ -30,7 +30,9 @@ import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
 	CANONICAL_SOUND_CLASS_DIR,
+	readAlsaCardAttachment,
 	resolveConfiguredAlsaCards,
+	type ScannedAlsaCard,
 	scanAlsaCards,
 } from "./alsa-card-scan.ts";
 import {
@@ -409,6 +411,10 @@ function getAudioSrcReverseAliases(): Record<string, string> {
 let scannedAudioCards: Record<string, string> = {};
 let scannedCaptureCardIds: ReadonlySet<string> = new Set();
 let scannedUsbModels: ReadonlyMap<string, string> = new Map();
+let scannedAttachments = new Map<
+	string,
+	NonNullable<ScannedAlsaCard["attachment"]>
+>();
 
 let audioDevices: Record<string, string> = {};
 addAudioCardById(audioDevices, NO_AUDIO_ID);
@@ -498,6 +504,20 @@ export function getAudioDevices() {
 		return { ...mock, ...audioDevices };
 	}
 	return audioDevices;
+}
+
+/** The selected row must still name the attachment that the picker listed. */
+export function captureMicPickerAttachment(id: string): () => boolean {
+	const card = scannedAudioCards[id];
+	if (card !== undefined) {
+		const attachment = scannedAttachments.get(card);
+		return () =>
+			attachment !== undefined &&
+			readAlsaCardAttachment(attachment.path) === attachment.token;
+	}
+	const fixture = mockAudioDevicesProvider?.()[id];
+	return () =>
+		fixture !== undefined && mockAudioDevicesProvider?.()[id] === fixture;
 }
 
 // Warn-only (NEVER mutate): a real device may hotplug the named asrc later
@@ -818,11 +838,7 @@ export async function broadcastAudioSources(
 		cardAliases,
 	);
 	if (getObservedEngineAudioDevices() !== undefined) rememberAudioIdentities();
-	const audio_sources = deriveAudioSources(
-		devices,
-		lastAudioDisplays,
-		lastAudioIdentities,
-	);
+	const audio_sources = deriveAudioSources(devices);
 	broadcastMsg("status", {
 		asrcs: Object.keys(devices),
 		audio_sources,
@@ -942,6 +958,11 @@ export async function updateAudioDevices(dir?: string) {
 	scannedAudioCards = sortedList;
 	scannedCaptureCardIds = captureCards;
 	scannedUsbModels = usbModels;
+	scannedAttachments = new Map(
+		cards.flatMap(({ id, attachment }) =>
+			attachment === undefined ? [] : [[id, attachment]],
+		),
+	);
 	composeAudioDevices();
 	if (dir === undefined) await refreshEngineAudioDevices();
 	if (!completeScan()) return;

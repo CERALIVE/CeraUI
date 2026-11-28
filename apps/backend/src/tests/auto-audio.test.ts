@@ -13,8 +13,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+	ATTEMPT_SCOPED_START_FEATURE,
 	type CerastreamClient,
+	type CheckMicRoutesParams,
 	type ListDevicesResult,
+	MIC_ROUTE_CHECK_FEATURE,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
 import { AUDIO_SOURCE_AUTO, type StreamSource } from "@ceraui/rpc/schemas";
@@ -938,11 +941,18 @@ describe("validateConfig — 'Auto' sentinel acceptance (Oracle R2-1)", () => {
 
 // ─── Engine start assembly — the launch copy feeds getAudioSrcId(asrcKey) ─────
 
+const hdmiProof = `mic-report-v1:${"a".repeat(64)}`;
 const RUN_OPTS: StreamRunOptions = {
 	pipeline: "hdmi",
 	host: "127.0.0.1",
 	port: 9000,
 	streamid: "sid",
+	micRoute: {
+		attemptId: "auto-hdmi",
+		legacyAddressOnly: false,
+		expected: async () => [hdmiProof],
+		applied: () => undefined,
+	},
 };
 
 const silentLogger: CerastreamBackendDeps["logger"] = {
@@ -960,9 +970,22 @@ function makeFakeClient(): {
 	const client = {
 		hello: {
 			protocol: "cerastream-ipc/1",
-			schema_version: "0.4.0",
+			schema_version: SCHEMA_VERSION,
 			engine_version: "test",
 		},
+		getCapabilities: async () => ({
+			features: [ATTEMPT_SCOPED_START_FEATURE, MIC_ROUTE_CHECK_FEATURE],
+		}),
+		prepareStart: async () => ({
+			attempt_id: "2a3a12a3-24ed-486b-8228-de548273a06f",
+			expires_in_ms: 10_000,
+		}),
+		checkMicRoutes: async ({ audio, operation }: CheckMicRoutesParams) =>
+			audio.device === "hw:CARD=rockchiphdmiin" &&
+			operation.kind === "verify" &&
+			Bun.deepEquals(operation.expected, [hdmiProof])
+				? { status: "checked", proofs: [hdmiProof] }
+				: { status: "mismatch" },
 		start: async (params: unknown) => {
 			calls.push({ op: "start", params });
 			return { session_id: "s1", state: "streaming" as const };
@@ -1046,6 +1069,7 @@ describe("Auto launch → engine start assembly", () => {
 		expect((params.audio as { device: string }).device).toBe(
 			"hw:CARD=rockchiphdmiin",
 		);
+		expect(params.mic_route_proofs).toEqual([hdmiProof]);
 	});
 
 	test("Pipeline-default resolution → engine start params carry NO audio.device", async () => {

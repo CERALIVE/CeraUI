@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { STOP_DEADLINE_MS } from "../modules/streaming/start-lifecycle-timing.ts";
 import {
 	evidenceHarness,
 	flushEvidence,
@@ -71,10 +72,13 @@ for (const boundary of ["connect", "subscribe"] as const) {
 		else h.holdSubscribe(gate.promise);
 		const launch = h.start();
 		await flushEvidence();
-		// When operator Stop acknowledges idle before the acquisition resumes.
-		expect(await h.session.stop("operator")).toEqual({ result: "stopped" });
-		gate.resolve();
-		await launch;
+		// Operator Stop acknowledges idle before the acquisition resumes.
+		try {
+			expect(await h.session.stop("operator")).toEqual({ result: "stopped" });
+		} finally {
+			gate.resolve();
+			await launch;
+		}
 		// Then the cancelled generation cannot physically resurrect the stream.
 		expect(h.clients[0]?.calls).not.toContain("start");
 		if (boundary === "connect")
@@ -108,6 +112,32 @@ test("R3-B4: adopted session delivers later idle despite obsolete probe authorit
 		state: "idle",
 		marked: false,
 	});
+});
+
+test("pre-dispatch Stop settles at its deadline without trusting late idle or sending Stop", async () => {
+	const h = harness();
+	const gate = Promise.withResolvers<void>();
+	h.holdConnect(gate.promise);
+	const launch = h.start({ asrc: "Mic" });
+	await h.connected;
+	const stop = h.session.stop("operator");
+	try {
+		await h.probeSubscribed;
+		const deadline = h.deadline(STOP_DEADLINE_MS);
+		if (deadline === undefined) throw new Error("missing Stop deadline");
+		deadline();
+		expect(await stop).toEqual({
+			result: "stop_failed",
+			reason: "stop_timeout",
+		});
+	} finally {
+		h.status(1, false);
+		gate.resolve();
+		await Promise.all([stop, launch]);
+	}
+	expect(h.session.streamLiveness()).toBe("unknown");
+	expect(h.clients.flatMap(({ calls }) => calls)).not.toContain("stop");
+	expect(h.startRequests).toEqual([]);
 });
 
 test("R3-B3: cancellation immediately before Start dispatch cannot resurrect the engine", async () => {

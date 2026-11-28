@@ -58,6 +58,7 @@
 
 import fs from "node:fs";
 
+import { micRouteProofsSchema } from "@ceralive/cerastream";
 import {
 	type RecoveryFailureReason,
 	recoveryFailureReasonSchema,
@@ -67,14 +68,19 @@ import {
 	audioBackendSchema,
 	audioCodecSchema,
 	audioInputSettingSchema,
+	balancerAlgorithmSchema,
+	compositionConfigSchema,
+	failoverRatePolicyInputSchema,
 	inputModeSchema,
 	type LifecycleState,
+	previewEncodeModeSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
 import {
 	framerateSchema,
+	type RuntimeConfig,
 	relayProtocolSchema,
 	resolutionSchema,
 	videoCodecSchema,
@@ -113,6 +119,7 @@ const armedStreamConfigSchema = z.object({
 	audio_physical_ids: z.record(z.string().min(1), z.string().min(1)).optional(),
 	/** Address-bound inputs may start unchanged but cannot be identified on restore. */
 	audio_unverified_ids: z.array(z.string().min(1)).optional(),
+	mic_route_proofs: micRouteProofsSchema.optional(),
 	/** The engine acknowledged a live switch to its silence leg. */
 	audio_silenced: z.boolean().optional(),
 	relay_server: z.string().optional(),
@@ -128,16 +135,24 @@ const armedStreamConfigSchema = z.object({
 	framerate: framerateSchema.optional(),
 	video_codec: videoCodecSchema.optional(),
 	video_passthrough: videoPassthroughSchema.optional(),
+	// Null means the launch used the engine default. Old markers omit these keys.
+	balancer: balancerAlgorithmSchema.nullable().optional(),
+	failover_rate_policy: failoverRatePolicyInputSchema.nullable().optional(),
+	previewEncode: previewEncodeModeSchema.nullable().optional(),
+	composition: compositionConfigSchema.optional(),
 	source: z.string().optional(),
 	source_stable_id: z.string().optional(),
-	selected_video_input: z.string().optional(),
+	// Null records an omitted input_id; a missing field is legacy.
+	selected_video_input: z.string().nullable().optional(),
 	input_mode: inputModeSchema.optional(),
 });
 export type ArmedStreamConfig = z.infer<typeof armedStreamConfigSchema>;
 
-type LaunchedAudio = StartAudio["config"] & {
+export type LaunchedAudio = StartAudio["config"] & {
+	readonly streamConfig?: RuntimeConfig;
 	readonly audio_physical_ids?: ArmedStreamConfig["audio_physical_ids"];
 	readonly audio_unverified_ids?: ArmedStreamConfig["audio_unverified_ids"];
+	readonly mic_route_proofs?: ArmedStreamConfig["mic_route_proofs"];
 	readonly audio_silenced?: boolean;
 };
 let launchedAudio: LaunchedAudio | undefined;
@@ -184,6 +199,7 @@ export type RestorationAttempt = z.infer<typeof restorationAttemptSchema>;
 
 const armedStreamMarkerSchema = z.object({
 	armedAt: z.number(),
+	armId: z.uuidv4().optional(),
 	bootId: z.string().min(1),
 	config: armedStreamConfigSchema,
 	/**

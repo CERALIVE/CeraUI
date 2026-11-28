@@ -75,6 +75,12 @@ export type StreamLaunchContext = {
 
 export type StreamStartRequest = {
 	readonly origin: StreamLaunchOrigin;
+	readonly audio?:
+		| Pick<
+				import("./start-audio.ts").StartAudio,
+				"assertAvailable" | "whileInFlight"
+		  >
+		| undefined;
 	readonly launch: (context: StreamLaunchContext) => Promise<void>;
 };
 
@@ -237,6 +243,8 @@ type ActiveAttempt = {
 	launchAdmitted: boolean;
 	cancelCause?: StreamStopCause;
 	cancelStop?: Promise<boolean>;
+	preflightStop?: Promise<boolean>;
+	launchRollback?: LaunchRollback;
 	cancelRetryWait?: () => void;
 };
 
@@ -325,6 +333,35 @@ export function createStreamSessionOrchestrator(
 	const stopWithinDeadline = cleanup.run;
 	const transition = ownership.transition;
 
+	const confirmPreDispatchStop = async (
+		owner: ReturnType<typeof ownership.capture>,
+		rollback: (() => Promise<void>) | undefined,
+	): Promise<void> => {
+		const deadline = Promise.withResolvers<never>();
+		let observing = true;
+		const current = () => observing && ownership.owns(owner);
+		const timer = scheduleTimeout(() => {
+			observing = false;
+			deadline.reject(new Error("stop_timeout"));
+		}, stopDeadlineMs);
+		try {
+			await Promise.race([
+				deadline.promise,
+				Promise.resolve(rollback?.()).then(async () => {
+					if (!current()) return;
+					const state = await withRuntimeObservationOwner(
+						current,
+						deps.queryRuntime,
+					);
+					if (state !== "idle") throw new Error("stop_not_confirmed");
+				}),
+			]);
+		} finally {
+			observing = false;
+			cancelTimeout(timer);
+		}
+	};
+
 	const finishCancelled = async (
 		attempt: ActiveAttempt,
 		liveness: "idle" | "unknown",
@@ -339,6 +376,15 @@ export function createStreamSessionOrchestrator(
 			return { result: "cancelled", attemptId: attempt.attemptId };
 		const owner = ownership.capture();
 		try {
+			if (attempt.preflightStop !== undefined) {
+				const idle = await attempt.preflightStop;
+				if (active === attempt && ownership.owns(owner)) {
+					if (idle && ownership.commit(owner, "idle", "idle"))
+						active = undefined;
+					else if (!idle) ownership.commit(owner, "reconciling", "unknown");
+				}
+				return { result: "cancelled", attemptId: attempt.attemptId };
+			}
 			if (
 				parkedResult?.result !== "stopped" &&
 				(liveness !== "idle" || (await attempt.cancelStop) !== true)
@@ -508,12 +554,10 @@ export function createStreamSessionOrchestrator(
 		}
 		ownership.protect();
 		const deadlineCancelledLaunches = new Set<number>();
-		let launchRollback: LaunchRollback | undefined;
-
 		const launchResult = await runStartWithRetry({
 			attemptId,
 			launch: (launchNumber) => {
-				launchRollback = undefined;
+				delete attempt.launchRollback;
 				const context: StreamLaunchContext = {
 					attemptId,
 					generation: attempt.generation,
@@ -523,12 +567,18 @@ export function createStreamSessionOrchestrator(
 						active !== attempt ||
 						deadlineCancelledLaunches.has(launchNumber),
 					registerRollback: (rollback) => {
-						if (!deadlineCancelledLaunches.has(launchNumber))
-							launchRollback = rollback;
+						if (
+							!attempt.cancelled &&
+							!deadlineCancelledLaunches.has(launchNumber)
+						)
+							attempt.launchRollback = rollback;
 					},
 				};
 				return ownership.trackLaunch(
-					withStreamLaunchOwnership(context, () => request.launch(context)),
+					withStreamLaunchOwnership(context, () => {
+						request.audio?.assertAvailable(attemptId);
+						return request.launch(context);
+					}),
 				);
 			},
 			classifyUnknown: (error) =>
@@ -536,7 +586,7 @@ export function createStreamSessionOrchestrator(
 					warn: (message, meta) => logger.warn(message, meta),
 				}),
 			cancelled: () => attempt.cancelled || active !== attempt,
-			launchRollback: () => launchRollback,
+			launchRollback: () => attempt.launchRollback,
 			onLaunchTimeout: async (launchNumber, rollback) => {
 				deadlineCancelledLaunches.add(launchNumber);
 				if (active !== attempt) return;
@@ -546,6 +596,7 @@ export function createStreamSessionOrchestrator(
 							await stopWithinDeadline(attempt.generation);
 							break;
 						case "transaction":
+						case "pre-dispatch":
 							await rollback.run();
 							break;
 						case undefined:
@@ -869,6 +920,7 @@ export function createStreamSessionOrchestrator(
 
 		const stoppedGeneration = active?.generation ?? ownership.generation;
 		const cancellingStart = ownership.state === "starting";
+		const rollback = cancellingStart ? active?.launchRollback : undefined;
 		if (cancellingStart && active !== undefined) {
 			active.cancelled = true;
 			active.cancelCause = cause;
@@ -888,15 +940,21 @@ export function createStreamSessionOrchestrator(
 		const owner = ownership.invalidate();
 
 		try {
-			const stopping = stopWithinDeadline(
-				stoppedGeneration,
-				cause === "operator",
-			);
-			if (cancellingStart && active !== undefined)
+			const preDispatch =
+				cancellingStart &&
+				(rollback === undefined || rollback.kind === "pre-dispatch");
+			const cleanupBeforeDispatch =
+				rollback?.kind === "pre-dispatch" ? rollback.run : undefined;
+			const stopping = preDispatch
+				? confirmPreDispatchStop(owner, cleanupBeforeDispatch)
+				: stopWithinDeadline(stoppedGeneration, cause === "operator");
+			if (cancellingStart && active !== undefined) {
 				active.cancelStop = stopping.then(
 					() => true,
 					() => false,
 				);
+				if (preDispatch) active.preflightStop = active.cancelStop;
+			}
 			await stopping;
 			if (!cancellingStart && ownership.commit(owner, "idle", "idle"))
 				active = undefined;
@@ -1161,7 +1219,8 @@ bindStreamLiveness(productionOrchestrator.streamLiveness);
 export function startStreamSession(
 	request: StreamStartRequest,
 ): Promise<StartResult> {
-	return productionOrchestrator.start(request);
+	const starting = productionOrchestrator.start(request);
+	return request.audio?.whileInFlight(starting) ?? starting;
 }
 
 export function stopStreamSession(cause: StreamStopCause): Promise<StopResult> {

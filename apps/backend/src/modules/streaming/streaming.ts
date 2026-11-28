@@ -34,7 +34,7 @@ import {
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastConfig } from "../../rpc/config-broadcast.ts";
-import { getConfig, saveConfig } from "../config.ts";
+import { getConfig, getConfigSaveRevision, saveConfig } from "../config.ts";
 import {
 	convertManualToRemoteRelay,
 	getRelays,
@@ -50,17 +50,25 @@ import {
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
 import { notifyWifiAdapterModeEdge } from "../wifi/wifi-adapter-mode-events.ts";
-import { getAudioDevices } from "./audio.ts";
+import { getAudioDevices, isPseudoAudioSource } from "./audio.ts";
+import { audioInputEngineId } from "./audio-inputs.ts";
 import { getAudioMixActive, getAudioOffActive } from "./audio-mix-status.ts";
 import { getLastCapabilities, getSupportedTransports } from "./capabilities.ts";
 import { isCompositionSupported } from "./composition.ts";
+import { deviceRegistry } from "./devices.ts";
 import { validateBitrate } from "./encoder.ts";
+import { noteStartedMicChoice } from "./mic-route-admission.ts";
 import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines } from "./pipelines.ts";
-import { noteSourceSelectionWrite } from "./sources.ts";
+import {
+	getSourcesMessage,
+	noteSourceSelectionWrite,
+	resolveSelectionAnchor,
+} from "./sources.ts";
 import { resolveSrtla } from "./srtla.ts";
 import { acceptStartAudio, type StartAudio } from "./start-audio.ts";
 import { mergePersistedStartConfig } from "./start-config-merge.ts";
+import { assertStreamLaunchOwnership } from "./stream-launch-ownership.ts";
 import { resolveStreamEndpoint } from "./transport/resolve-endpoint.ts";
 
 export type StartMessage = { start: ConfigParameters };
@@ -83,6 +91,7 @@ export type ConfigParameters = {
 	max_br?: number | undefined;
 	resolution?: Resolution | undefined;
 	framerate?: Framerate | undefined;
+	video_codec?: RuntimeConfig["video_codec"] | null;
 	autostart?: boolean | undefined;
 	source?: string | undefined;
 	selected_video_input?: string | undefined;
@@ -146,13 +155,13 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 export async function validateConfig(
 	params: Partial<ConfigParameters>,
 	startAudio?: Pick<StartAudio, "savedAsrc" | "audioEvidence">,
+	relays = { snapshot: getRelays() },
 ) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
-	// `null` is setConfig's explicit CLEAR, never a start value, and the runtime
-	// schema carries no null arm — so it is normalized BEFORE the parse rather
-	// than dropped after it, or a start would reject an operator's "off".
+	// A wire `null` clears the field; the launch runtime represents that as absent.
 	if (params.composition === null) delete params.composition;
+	if (params.video_codec === null) delete params.video_codec;
 	if (params.audio_inputs === null) delete params.audio_inputs;
 
 	// Pre-validate with Zod schema for type safety and basic constraints
@@ -216,9 +225,8 @@ export async function validateConfig(
 	}
 
 	// audio source
-	const config = getConfig();
 	const savedAsrc =
-		startAudio === undefined ? config.asrc : startAudio.savedAsrc;
+		startAudio === undefined ? getConfig().asrc : startAudio.savedAsrc;
 	const audioDevicesMap = getAudioDevices();
 	if (pipeline.supportsAudio) {
 		if (typeof validated.asrc !== "string")
@@ -242,7 +250,10 @@ export async function validateConfig(
 	// minimum here so a sub-2s persisted/pushed value never reaches the engine).
 	if (validated.srt_latency === undefined)
 		throw new Error("Invalid SRT latency");
-	params.srt_latency = Math.max(validated.srt_latency, SRTLA_MIN_LATENCY_MS);
+	validated.srt_latency = params.srt_latency = Math.max(
+		validated.srt_latency,
+		SRTLA_MIN_LATENCY_MS,
+	);
 
 	const { srtlaAddr, srtlaPort, streamid } = resolveStreamEndpoint(
 		{
@@ -268,38 +279,72 @@ export async function validateConfig(
 				? { relay_protocol: params.relay_protocol }
 				: {}),
 		},
-		getRelays(),
-		config.relay_protocol,
+		relays.snapshot,
+		startAudio === undefined ? getConfig().relay_protocol : undefined,
 		{ ristAvailable: getSupportedTransports().includes(RIST_TRANSPORT) },
 	);
 
-	return { pipeline, srtlaAddr, srtlaPort, streamid };
+	return { pipeline, config: validated, srtlaAddr, srtlaPort, streamid };
 }
+
+export function acceptStartConfig(
+	request: ConfigParameters,
+	saved = getConfig(),
+	source = {
+		stableId:
+			request.source === undefined
+				? saved.source_stable_id
+				: resolveSelectionAnchor(request.source, getSourcesMessage().sources),
+	},
+	startAudio?: StartAudio,
+) {
+	const saveRevision = getConfigSaveRevision();
+	const relays = { snapshot: getRelays() };
+	const params = mergePersistedStartConfig(saved, request);
+	const selectedVideoInput =
+		params.selected_video_input ?? deviceRegistry.getActiveInput();
+	const audio = startAudio ?? acceptStartAudio(request, saved);
+	let prepared: Awaited<ReturnType<typeof validateConfig>> | undefined;
+	return {
+		params,
+		audio,
+		prepare: async () => {
+			if (prepared !== undefined) return prepared;
+			const effective = { ...params, ...audio.config };
+			const launch = await validateConfig(effective, audio, relays);
+			launch.config.source_stable_id = source.stableId;
+			launch.config.selected_video_input = selectedVideoInput;
+			const srtlaAddr = await resolveSrtla(launch.srtlaAddr);
+			assertStreamLaunchOwnership();
+			// DNS may yield to an operator save, including a save of the same
+			// values. The launch can still proceed, but it no longer owns disk.
+			if (getConfigSaveRevision() === saveRevision)
+				persistStartConfig(effective, source.stableId);
+			prepared = { ...launch, srtlaAddr };
+			return prepared;
+		},
+	} as const;
+}
+
+export type AcceptedStartConfig = ReturnType<typeof acceptStartConfig>;
 
 export async function updateConfig(
 	requestedParams: ConfigParameters,
-	startAudio: StartAudio = acceptStartAudio(requestedParams),
+	startAudio?: StartAudio,
 ) {
-	// Every start is a partial update over the persisted stream config. Keep the
-	// merge at this shared seam: UI starts arrive through session.start, while a
-	// set-profile reconnect calls it directly with {}. Parsing through the wire
-	// schema projects only stream fields, so credentials in runtime config can
-	// never ride the applied start object.
-	const params: ConfigParameters = {
-		...mergePersistedStartConfig(getConfig(), requestedParams),
-		...startAudio.config,
-	};
+	return acceptStartConfig(
+		requestedParams,
+		getConfig(),
+		undefined,
+		startAudio,
+	).prepare();
+}
 
-	const {
-		pipeline,
-		srtlaAddr: initialAddr,
-		srtlaPort,
-		streamid,
-	} = await validateConfig(params, startAudio);
-
-	const srtlaAddr = await resolveSrtla(initialAddr);
+function persistStartConfig(
+	params: ConfigParameters,
+	sourceStableId: string | undefined,
+) {
 	const config = getConfig();
-	// Save the updated config
 	config.pipeline = params.pipeline;
 	config.max_br = params.max_br;
 	config.srt_latency = params.srt_latency;
@@ -314,14 +359,10 @@ export async function updateConfig(
 	if (params.source !== undefined) {
 		config.source = params.source;
 		config.selected_video_input = params.selected_video_input;
-		noteSourceSelectionWrite(params.source);
+		noteSourceSelectionWrite(params.source, {
+			stableId: sourceStableId ?? null,
+		});
 	}
-
-	// Anything saved since the press is the next Start's and stays.
-	const { asrc, acodec, ...audio } = startAudio.unsaved();
-	Object.assign(config, audio);
-	if (pipeline.supportsAudio && acodec) config.acodec = acodec;
-	if (pipeline.supportsAudio && asrc) config.asrc = asrc;
 
 	if (params.relay_server) {
 		config.relay_server = params.relay_server;
@@ -351,6 +392,42 @@ export async function updateConfig(
 
 	saveConfig();
 	broadcastConfig(config);
+}
 
-	return { pipeline, srtlaAddr, srtlaPort, streamid };
+/** A rejected Start must not save its proposed audio over the next-start choice. */
+export function saveAppliedStartAudio(
+	startAudio: StartAudio,
+	accepted: {
+		readonly pipeline: { readonly supportsAudio: boolean };
+		readonly config: RuntimeConfig;
+	},
+) {
+	const config = getConfig();
+	const { asrc, acodec, ...fields } = startAudio.unsaved();
+	const verified = (id: string) =>
+		noteStartedMicChoice(config, id, startAudio.verifiedMicChoices.get(id));
+	const saveAsrc =
+		asrc &&
+		(asrc === AUDIO_SOURCE_AUTO || isPseudoAudioSource(asrc) || verified(asrc));
+	// A mix is one setting. Keep the existing mix if any new microphone in
+	// the proposed one was not actually used and verified by this launch.
+	let saveMix = true;
+	for (const { id } of fields.audio_inputs ?? []) {
+		if (
+			!config.audio_inputs?.some((input) => input.id === id) &&
+			audioInputEngineId(id, accepted.config) !== "embedded" &&
+			!verified(id)
+		)
+			saveMix = false;
+	}
+	if (!saveMix) delete fields.audio_inputs;
+	const applied = {
+		...fields,
+		...(accepted.pipeline.supportsAudio && saveAsrc ? { asrc } : {}),
+		...(accepted.pipeline.supportsAudio && acodec ? { acodec } : {}),
+	};
+	if (Object.keys(applied).length === 0) return;
+	Object.assign(config, applied);
+	saveConfig();
+	broadcastConfig(config);
 }

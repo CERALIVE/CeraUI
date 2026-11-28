@@ -288,6 +288,15 @@ Confirmed Stop/rollback restores it regardless of generation. Cancellation retai
 the launch's settled rollback certainty and cancelling Stop's cause/acknowledgement;
 acknowledged operator cancellation plus a safely settled launch does not need a blind
 second Stop. A non-adopting probe has no authority to advance the live client's epoch.
+During microphone preflight or after scoped launch negotiation but before Start
+dispatch, Stop rolls back only attempt-owned resources and requires current idle
+evidence from a read-only probe. This includes the initial engine connection
+and capability read for a microphone launch whose final audio is resolved
+later. A foreign live stream is not stopped and does not confirm idle.
+Rollback and observation share the existing Stop
+deadline; timeout retains UNKNOWN and retires the probe's authority. An explicit
+Stop on the ordinary, unscoped launch path without a concrete microphone keeps
+its one engine Stop.
 Contradictory/transitional current status is not silence: it retains UNKNOWN protection.
 Reboot clears the tmpfs sentinel and permits that empty admission baseline; it
 does not upgrade a silent probe to an affirmative engine-idle observation.

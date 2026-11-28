@@ -1,3 +1,4 @@
+import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { getConfig } from "../config.ts";
 import type { ArmedStreamConfig } from "./armed-stream-marker.ts";
@@ -13,8 +14,13 @@ import {
 	audioInputEngineId,
 	effectiveAudioInputs,
 	projectLaunchAudioInputs,
+	unavailableAudioRoute,
 } from "./audio-inputs.ts";
 import { getLastCapabilities } from "./capabilities.ts";
+import {
+	captureSavedMicProofs,
+	freezeMicChoices,
+} from "./mic-route-admission.ts";
 
 // The audio fields a Start request may save.
 const audioSaves = { asrc: 0, audio_inputs: 0, acodec: 0, delay: 0 };
@@ -30,6 +36,8 @@ type StartAudioConfig = {
 	readonly [Field in StartAudioField]: RuntimeConfig[Field];
 };
 interface StartAudioRequest {
+	readonly pipeline?: string | undefined;
+	readonly source?: string | undefined;
 	readonly asrc?: string | undefined;
 	readonly audio_inputs?: RuntimeConfig["audio_inputs"] | null;
 	readonly acodec?: string | undefined;
@@ -43,6 +51,19 @@ export interface StartAudio {
 	 */
 	readonly config: StartAudioConfig;
 	readonly audioEvidence: ReadonlyMap<string, AudioIdentityEvidence>;
+	readonly micChoices: NonNullable<ReturnType<typeof freezeMicChoices>>;
+	readonly assertAvailable: (attemptId: string) => void;
+	readonly autoMicChoices: (
+		config: RuntimeConfig,
+		audioOff: boolean,
+	) => ReturnType<typeof freezeMicChoices>;
+	/** Proofs accepted by the engine for this launch, not just observed at press. */
+	readonly verifiedMicChoices: Map<string, string>;
+	readonly originalMicChoice: (id: string) => string;
+	readonly restoration?: {
+		readonly proofs: ArmedStreamConfig["mic_route_proofs"];
+		readonly legacyAddressOnly: boolean;
+	};
 	/** The saved pick at the press: it needs no device to be present yet. */
 	readonly savedAsrc: string | undefined;
 	/**
@@ -69,11 +90,13 @@ export function audioBackendInUse(): RuntimeConfig["audio_backend"] {
  */
 export function acceptStartAudio(
 	request: StartAudioRequest = {},
-	saved: Pick<RuntimeConfig, StartAudioField> = getConfig(),
+	saved: RuntimeConfig = getConfig(),
 	recordedEvidence?: ReadonlyMap<string, AudioIdentityEvidence>,
+	restoration?: StartAudio["restoration"],
 ): StartAudio {
 	const savedAsrc = saved.asrc;
 	const saves = { ...audioSaves };
+	const savedProofs = captureSavedMicProofs(saved);
 	const pressed: StartAudioConfig = structuredClone({
 		asrc: request.asrc ?? savedAsrc,
 		audio_inputs:
@@ -97,8 +120,36 @@ export function acceptStartAudio(
 	}
 	const legacySuccessor = (id: string) =>
 		audioEvidence.has(id) ? undefined : audioIdentitySuccessor(id);
+	const micChoices =
+		restoration === undefined
+			? freezeMicChoices(
+					{
+						...saved,
+						...request,
+						...pressed,
+						pipeline: request.pipeline ?? saved.pipeline,
+						source: request.source ?? saved.source,
+						asrc: pressed.asrc === AUDIO_SOURCE_AUTO ? undefined : pressed.asrc,
+					},
+					savedProofs,
+				)
+			: new Map();
 	const startAudio: StartAudio = {
 		audioEvidence,
+		verifiedMicChoices: new Map(),
+		micChoices: micChoices ?? new Map(),
+		assertAvailable: (attemptId) => {
+			if (micChoices === null) throw unavailableAudioRoute(attemptId);
+		},
+		originalMicChoice: (id) =>
+			startAudio.micChoices.has(id)
+				? id
+				: ([...startAudio.micChoices.keys()].find(
+						(key) => legacySuccessor(key) === id,
+					) ?? id),
+		...(restoration === undefined ? {} : { restoration }),
+		autoMicChoices: (config, audioOff) =>
+			freezeMicChoices(config, savedProofs, startAudio.micChoices, audioOff),
 		get config() {
 			const { asrc, audio_inputs } = pressed;
 			return {
@@ -114,7 +165,9 @@ export function acceptStartAudio(
 		},
 		savedAsrc,
 		unsaved: () => {
+			if (saved !== getConfig()) return {};
 			const { asrc, audio_inputs, acodec, delay } = startAudio.config;
+			// Hardware address migration is not a new operator save.
 			const stillNewest = (field: SavedAudioField) =>
 				request[field] !== undefined && audioSaves[field] === saves[field];
 			return {
@@ -143,18 +196,26 @@ export function acceptStartAudio(
  * now. A marker that records the mix records the whole choice, so what it omits was
  * unset; an older one leaves the mix and the backend to the saved ones.
  */
-export function restoredStartAudio({
-	audio_inputs,
-	audio_physical_ids,
-	audio_unverified_ids,
-	audio_silenced,
-	...recorded
-}: ArmedStreamConfig): StartAudio {
+export function restoredStartAudio(
+	{
+		audio_inputs,
+		audio_physical_ids,
+		audio_unverified_ids,
+		audio_silenced,
+		mic_route_proofs,
+		balancer: _balancer,
+		failover_rate_policy: _failoverRatePolicy,
+		previewEncode: _previewEncode,
+		selected_video_input: _selectedVideoInput,
+		...recorded
+	}: ArmedStreamConfig,
+	saved: RuntimeConfig,
+): StartAudio {
 	return acceptStartAudio(
 		{},
 		{
 			...(audio_inputs === undefined
-				? getConfig()
+				? saved
 				: { audio_inputs: audio_inputs ?? undefined }),
 			...recorded,
 			...(audio_silenced ? { asrc: NO_AUDIO_ID } : {}),
@@ -168,6 +229,13 @@ export function restoredStartAudio({
 				(id) => [id, { kind: "unavailable" }] as const,
 			),
 		]),
+		{
+			proofs: mic_route_proofs,
+			legacyAddressOnly:
+				mic_route_proofs === undefined &&
+				audio_physical_ids === undefined &&
+				audio_unverified_ids === undefined,
+		},
 	);
 }
 
@@ -188,6 +256,7 @@ export function resolvePinnedLaunchAudio(
 			audio_inputs,
 			audio_physical_ids: undefined,
 			audio_unverified_ids: undefined,
+			originalKeys: new Map<string, string>(),
 		} as const;
 
 	const roster = liveAudioIdentityEvidence();
@@ -196,11 +265,13 @@ export function resolvePinnedLaunchAudio(
 		: undefined;
 	const pinned = new Map<string, string>();
 	const unverified = new Set<string>();
+	const originalKeys = new Map<string, string>();
 	const resolve = (id: string) => {
 		const evidence = audioEvidence.get(id);
 		if (evidence === undefined) return id;
 		const address = audioAddressForEvidence(id, evidence, roster);
 		if (address !== undefined) {
+			originalKeys.set(address, id);
 			if (evidence.kind === "physical") pinned.set(address, evidence.stableId);
 			else unverified.add(address);
 		}
@@ -237,5 +308,6 @@ export function resolvePinnedLaunchAudio(
 		audio_inputs: inputs,
 		audio_physical_ids: pinned.size ? Object.fromEntries(pinned) : undefined,
 		audio_unverified_ids: unverified.size ? [...unverified] : undefined,
+		originalKeys,
 	} as const;
 }

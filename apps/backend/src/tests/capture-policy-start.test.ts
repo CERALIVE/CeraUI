@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import type {
 	CerastreamClient,
+	EventParams,
 	GetCapabilitiesResult,
 } from "@ceralive/cerastream";
 import { SCHEMA_VERSION, statusEventSchema } from "@ceralive/cerastream";
@@ -29,7 +30,7 @@ const caps: GetCapabilitiesResult = {
 	sources: [],
 };
 
-async function setup(features: string[]) {
+async function setup(features: string[], holdStart?: () => Promise<void>) {
 	await getCapabilities({
 		fetchEngineCapabilities: async () => ({
 			caps: { ...caps, features },
@@ -38,12 +39,20 @@ async function setup(features: string[]) {
 		fetchEngineDevices: async () => ({ devices: [] }),
 	});
 	const calls: Array<{ method: string; params: unknown }> = [];
+	let publish: ((event: EventParams) => void) | undefined;
 	const client = {
 		hello: { schema_version: SCHEMA_VERSION },
 		getCapabilities: async () => ({ ...caps, features }),
-		subscribeEvents: async () => ({ result: { topics: [] }, close: () => {} }),
+		subscribeEvents: async (
+			_params: unknown,
+			handler: (event: EventParams) => void,
+		) => {
+			publish = handler;
+			return { result: { topics: [] }, close: () => {} };
+		},
 		rawRequest: async (method: string, params: unknown) => {
 			calls.push({ method, params });
+			if (method === "start") await holdStart?.();
 			return { session_id: "one", state: "streaming" };
 		},
 		reloadConfig: async (params: unknown) => {
@@ -56,10 +65,13 @@ async function setup(features: string[]) {
 		connect: async () => client,
 		getConfig: () => config,
 	});
-	return { backend, calls };
+	return { backend, calls, publish: (event: EventParams) => publish?.(event) };
 }
 
-afterEach(() => clearCapabilitiesCache());
+afterEach(() => {
+	config.failover_rate_policy = "adapt";
+	clearCapabilitiesCache();
+});
 
 test("failover_rate_policy is sent on start only when the engine advertises its feature", async () => {
 	for (const features of [[], ["failover-rate-policy"]]) {
@@ -78,14 +90,23 @@ test("failover_rate_policy is sent on start only when the engine advertises its 
 	}
 });
 
-test("a live policy change is sent via reload-config, never a restart", async () => {
-	const h = await setup(["failover-rate-policy"]);
-	await h.backend.start(config, {
-		pipeline: "test",
-		host: "127.0.0.1",
-		port: 9000,
-		streamid: "",
+test("the live policy reload waits for Start and does not resend next-start settings", async () => {
+	const entered = Promise.withResolvers<void>();
+	const acknowledge = Promise.withResolvers<void>();
+	const h = await setup(["failover-rate-policy"], async () => {
+		entered.resolve();
+		await acknowledge.promise;
 	});
+	const starting = h.backend.start(
+		{ ...config },
+		{
+			pipeline: "test",
+			host: "127.0.0.1",
+			port: 9000,
+			streamid: "",
+		},
+	);
+	await entered.promise;
 	config.failover_rate_policy = "retime";
 	const heartbeat = statusEventSchema.parse({
 		type: "status",
@@ -104,19 +125,27 @@ test("a live policy change is sent via reload-config, never a restart", async ()
 			},
 		},
 	});
-	h.backend.handleEvent(heartbeat);
+	try {
+		h.publish(heartbeat);
+	} finally {
+		acknowledge.resolve();
+	}
+	await starting;
+	await h.backend.settle();
+	expect(h.calls.filter((call) => call.method === "reload-config")).toEqual([]);
+
+	h.publish(heartbeat);
 	await h.backend.settle();
 	expect(
 		h.calls.filter((call) => call.method === "reload-config"),
 	).toHaveLength(1);
-	expect(h.calls[h.calls.length - 1]?.params).toMatchObject({
+	expect(h.calls[h.calls.length - 1]?.params).toEqual({
 		failover_rate_policy: "retime",
 	});
-	h.backend.handleEvent(heartbeat);
+	h.publish(heartbeat);
 	await h.backend.settle();
 	expect(
 		h.calls.filter((call) => call.method === "reload-config"),
 	).toHaveLength(1);
 	expect(h.calls.filter((call) => call.method === "start")).toHaveLength(1);
-	config.failover_rate_policy = "adapt";
 });

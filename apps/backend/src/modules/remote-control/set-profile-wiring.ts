@@ -37,7 +37,6 @@ import { broadcastConfig } from "../../rpc/config-broadcast.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
 import { captureOperatorStopIntent } from "../streaming/operator-stop-intent.ts";
-import { acceptStartAudio } from "../streaming/start-audio.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -47,7 +46,7 @@ import {
 	startStreamSession,
 	stopStreamSession,
 } from "../streaming/stream-session-orchestrator.ts";
-import { getIsStreaming } from "../streaming/streaming.ts";
+import { acceptStartConfig, getIsStreaming } from "../streaming/streaming.ts";
 import { start as startStream } from "../streaming/streamloop.ts";
 import { reportActiveProfile } from "./active-profile-reporter.ts";
 import { configureSetProfile, type SetProfileCaps } from "./set-profile.ts";
@@ -66,7 +65,7 @@ function projectCaps(): SetProfileCaps {
 async function reconnect(): Promise<void> {
 	const currentIntent = captureOperatorStopIntent();
 	if (!getIsStreaming()) return;
-	const startAudio = acceptStartAudio();
+	const accepted = acceptStartConfig({});
 	// `reconfigure`, not `operator`: this stop is the first half of a restart the
 	// platform asked for, so the armed-stream marker must survive it. Clearing it
 	// here would silently disarm restoration for the rest of the session.
@@ -79,22 +78,22 @@ async function reconnect(): Promise<void> {
 	}
 	if (!currentIntent()) return;
 	// The control channel has no UI socket; a no-op stub satisfies the session's
-	// status/error sends. Empty params → the start reads the just-persisted config.
+	// status/error sends. The settings were captured before stopping.
 	const stubConn = {
 		send: () => {
 			/* no-op: control channel has no UI socket */
 		},
 		data: { isAuthenticated: true, lastActive: Date.now() },
 	} as unknown as import("ws").default;
-	const starting = startStreamSession({
+	const started = await startStreamSession({
 		origin: "set-profile",
+		audio: accepted.audio,
 		launch: async ({ attemptId, generation }) => {
 			const result = await startStream(
 				stubConn,
-				{},
+				accepted,
 				generation,
 				attemptId,
-				startAudio,
 			);
 			if (!result.success) {
 				throw new StreamStartFailure(
@@ -110,7 +109,6 @@ async function reconnect(): Promise<void> {
 			}
 		},
 	});
-	const started = await startAudio.whileInFlight(starting);
 	if (started.result !== "started") {
 		logger.warn("set-profile: stream restart did not complete", { started });
 	}

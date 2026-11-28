@@ -60,7 +60,7 @@ describe("startStream — audio-source probe failure surfaces a structured reaso
 			"sid",
 			{ probe: failingProbe },
 			undefined,
-			undefined,
+			{ ...getConfig() },
 			acceptStartAudio(),
 		);
 
@@ -84,7 +84,7 @@ describe("startStream — audio-source probe failure surfaces a structured reaso
 			"sid",
 			{ probe: failingProbe },
 			undefined,
-			undefined,
+			{ ...getConfig() },
 			acceptStartAudio(),
 		);
 

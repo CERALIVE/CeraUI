@@ -382,18 +382,32 @@ test.describe("audio mixer — caps-full", () => {
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });
 	});
 
-	test("a pick whose mix the device refuses still saves the pick, and Start still sends the new main input first", async ({
+	test("a pick retains an unplugged saved input and Start admits the new main input first", async ({
 		page,
 		backendRpc,
 	}) => {
 		await backendRpc.call(["streaming", "setConfig"], { audio_inputs: savedTwo });
 		await expect(page.getByTestId(`audio-strip-enable-${SECOND}`)).toHaveAttribute("aria-checked", "true");
-		wire.refuseAudioInputs("audio_input_unknown");
-		await pickThird(page);
-		await expect
-			.poll(() => backendRpc.call<{ asrc?: string; audio_inputs?: unknown[] }>(["streaming", "getConfig"]))
-			.toMatchObject({ asrc: THIRD, audio_inputs: savedTwo });
-		wire.refuseAudioInputs(null);
+		const setSecondAttached = (attached: boolean) =>
+			backendRpc.call<{ success: boolean }>(["streaming", "setMockDeviceAttached"], {
+				input_id: "audio_elgato_wave3",
+				attached,
+			});
+		expect((await setSecondAttached(false)).success).toBe(true);
+		try {
+			await pickThird(page);
+			await expect
+				.poll(() => backendRpc.call<{ asrc?: string; audio_inputs?: unknown[] }>(["streaming", "getConfig"]))
+				.toMatchObject({
+					asrc: THIRD,
+					audio_inputs: [{ ...savedTwo[0], id: THIRD }, ...savedTwo],
+				});
+			expect(wire.calls("streaming.setConfig").map(({ input }) => input)).toEqual([
+				{ asrc: THIRD, audio_pick: true },
+			]);
+		} finally {
+			expect((await setSecondAttached(true)).success).toBe(true);
+		}
 		await startButton(page).click();
 		await thirdGainIsAdmittedLive(page);
 		await backendRpc.call(["streaming", "setConfig"], { asrc: MAIN, audio_inputs: null });

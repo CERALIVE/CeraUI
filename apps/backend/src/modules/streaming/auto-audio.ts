@@ -439,10 +439,10 @@ export function buildAutoLaunchConfig(
  * Contract: `capture-presence.ts`.
  */
 export function resolveAutoAsrcFromLiveState(
-	sourceId = getConfig().source,
+	sourceId: string | null = getConfig().source ?? null,
 ): AutoAsrcResolution {
 	const sources = getSourcesMessage().sources;
-	const source = resolveSelectedSourceWithGrace(sourceId, sources);
+	const source = resolveSelectedSourceWithGrace(sourceId ?? undefined, sources);
 	return resolveAutoAsrc({
 		source,
 		audioDevices: getAudioDevices(),

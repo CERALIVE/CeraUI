@@ -16,6 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { statSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { readdirP } from "../../helpers/files.ts";
@@ -47,6 +48,18 @@ export interface ScannedAlsaCard {
 	readonly entries: readonly string[];
 	/** USB vendor/product reported by the kernel, when readable. */
 	readonly usbModel?: string;
+	readonly attachment?: { readonly path: string; readonly token: string };
+}
+
+/** A live kernel card incarnation, not a receiver identity across detach. */
+export function readAlsaCardAttachment(path: string): string | undefined {
+	try {
+		const present = statSync(path, { bigint: true });
+		return `${present.dev}:${present.ino}:${present.birthtimeNs}`;
+	} catch (error) {
+		if (error instanceof Error && "code" in error) return undefined;
+		throw error;
+	}
 }
 
 /** Effectful surface, injected so a test drives the resolver without sysfs. */
@@ -54,12 +67,14 @@ export interface AlsaCardScanDeps {
 	readDir: (path: string) => Promise<string[]>;
 	readText: (path: string) => Promise<string | undefined>;
 	resolveDevicePath?: (path: string) => Promise<string | undefined>;
+	readAttachment?: (path: string) => string | undefined;
 }
 
 const defaultScanDeps: AlsaCardScanDeps = {
 	readDir: (path) => readdirP(path),
 	readText: (path) => readTextFile(path),
 	resolveDevicePath: (path) => realpath(path).catch(() => undefined),
+	readAttachment: readAlsaCardAttachment,
 };
 
 /**
@@ -143,14 +158,19 @@ export async function scanAlsaCards(
 	const cards: ScannedAlsaCard[] = [];
 	for (const entry of cardEntriesInIndexOrder(entries)) {
 		const path = join(dir, entry);
+		const token = deps.readAttachment?.(path);
 		const id = ((await deps.readText(join(path, "id"))) ?? "").trim();
 		if (id === "") continue;
 		const usbModel = await readAudioUsbModel(path, deps);
+		const entries = await readCardEntries(path, deps);
 		cards.push({
 			id,
 			index: cardIndex(entry),
-			entries: await readCardEntries(path, deps),
+			entries,
 			...(usbModel === undefined ? {} : { usbModel }),
+			...(token !== undefined && deps.readAttachment?.(path) === token
+				? { attachment: { path, token } }
+				: {}),
 		});
 	}
 	return cards;
